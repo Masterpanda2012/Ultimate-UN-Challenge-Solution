@@ -1,0 +1,1167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cattle Movement Forecasting — Prototype</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   DESIGN SYSTEM
+   ============================================================ */
+:root {
+  --navy: #0d1b2a;
+  --navy-2: #132336;
+  --navy-3: #1a2f44;
+  --navy-4: #1e3a52;
+  --slate: #2c4a63;
+  --slate-2: #3a5f7d;
+  --border: rgba(255,255,255,0.08);
+  --border-strong: rgba(255,255,255,0.14);
+  --amber: #e8a838;
+  --amber-dim: rgba(232,168,56,0.15);
+  --amber-bright: #f0bf5f;
+  --teal: #2fbfad;
+  --teal-dim: rgba(47,191,173,0.12);
+  --red: #e05c5c;
+  --red-dim: rgba(224,92,92,0.12);
+  --green: #4caf82;
+  --green-dim: rgba(76,175,130,0.12);
+  --yellow: #e8c838;
+  --text-bright: #f0f4f8;
+  --text-mid: #8fa8be;
+  --text-dim: #4d6a82;
+  --white: #ffffff;
+  --radius: 10px;
+  --radius-sm: 6px;
+  --radius-lg: 16px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden}
+body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--navy);color:var(--text-bright);display:flex;flex-direction:column}
+
+/* ============================================================
+   PROTOTYPE BANNER
+   ============================================================ */
+#proto-banner{
+  background: linear-gradient(90deg, #2d1a00, #3d2500, #2d1a00);
+  border-bottom: 1px solid rgba(232,168,56,0.3);
+  padding: 8px 20px;
+  display: flex; align-items: center; justify-content: space-between;
+  flex-shrink: 0;
+  animation: bannerPulse 4s ease-in-out infinite;
+}
+@keyframes bannerPulse{0%,100%{background:linear-gradient(90deg,#2d1a00,#3d2500,#2d1a00)}50%{background:linear-gradient(90deg,#3d2500,#4a2d00,#3d2500)}}
+.banner-left{display:flex;align-items:center;gap:10px}
+.banner-dot{width:8px;height:8px;border-radius:50%;background:var(--amber);animation:dotBlink 2s ease-in-out infinite}
+@keyframes dotBlink{0%,100%{opacity:1}50%{opacity:0.4}}
+.banner-text{font-size:12.5px;font-weight:500;color:var(--amber);font-family:'JetBrains Mono',monospace;letter-spacing:0.02em}
+.banner-badge{font-family:'JetBrains Mono',monospace;font-size:10.5px;padding:3px 10px;border:1px solid rgba(232,168,56,0.4);border-radius:99px;color:rgba(232,168,56,0.8)}
+
+/* ============================================================
+   LAYOUT
+   ============================================================ */
+#app{display:flex;flex:1;overflow:hidden}
+
+/* ============================================================
+   SIDEBAR
+   ============================================================ */
+#sidebar{
+  width:230px;min-width:230px;
+  background:var(--navy-2);
+  border-right:1px solid var(--border);
+  display:flex;flex-direction:column;
+  overflow:hidden;
+}
+.sidebar-logo{padding:20px 18px 16px;border-bottom:1px solid var(--border)}
+.logo-title{font-family:'Plus Jakarta Sans',sans-serif;font-size:17px;color:var(--text-bright);line-height:1.2}
+.logo-sub{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-dim);margin-top:4px;letter-spacing:0.02em;text-transform:uppercase}
+.sidebar-nav{flex:1;padding:12px 8px;overflow-y:auto}
+.nav-section-label{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.02em;padding:8px 10px 4px}
+.nav-btn{
+  display:flex;align-items:center;gap:10px;
+  width:100%;padding:9px 10px;border-radius:var(--radius-sm);
+  font-family:'Plus Jakarta Sans',sans-serif;font-size:13px;font-weight:500;color:var(--text-mid);
+  background:none;border:none;cursor:pointer;text-align:left;
+  transition:all 0.15s ease;margin-bottom:1px;
+}
+.nav-btn:hover{background:var(--navy-3);color:var(--text-bright)}
+.nav-btn.active{background:var(--navy-4);color:var(--amber);border-left:2px solid var(--amber);padding-left:8px}
+.nav-btn svg{width:16px;height:16px;flex-shrink:0;opacity:0.7}
+.nav-btn.active svg{opacity:1}
+.sidebar-footer{padding:12px;border-top:1px solid var(--border)}
+.integration-badge{background:var(--navy-3);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px}
+.integration-badge .ib-label{font-family:'JetBrains Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-dim);margin-bottom:5px}
+.integration-badge .ib-status{font-size:11.5px;color:var(--red);font-weight:500;display:flex;align-items:center;gap:6px}
+.ib-dot{width:6px;height:6px;border-radius:50%;background:var(--red)}
+
+/* ============================================================
+   MAIN AREA
+   ============================================================ */
+#main{flex:1;overflow-y:auto;display:flex;flex-direction:column;min-width:0}
+.page{display:none;padding:28px 32px;flex-direction:column;gap:20px;flex:1}
+.page.active{display:flex}
+#page-map.active{padding:0;flex-direction:row;overflow:hidden}
+#page-assistant.active{padding:0;flex-direction:column;height:100%}
+
+/* ============================================================
+   COMMON COMPONENTS
+   ============================================================ */
+.page-header{margin-bottom:4px}
+.page-header h1{font-family:'Plus Jakarta Sans',sans-serif;font-size:22px;font-weight:600;color:var(--text-bright);line-height:1.3}
+.page-header p{font-size:13.5px;color:var(--text-mid);margin-top:5px;line-height:1.5}
+
+/* Cards */
+.card{background:var(--navy-2);border:1px solid var(--border);border-radius:var(--radius);padding:20px}
+.card-title{font-family:'JetBrains Mono',monospace;font-size:10.5px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-dim);margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.card-title::after{content:'';flex:1;height:1px;background:var(--border)}
+
+/* Placeholder boxes */
+.data-placeholder{
+  background:var(--navy-3);border:1px dashed rgba(255,255,255,0.1);
+  border-radius:var(--radius-sm);padding:18px;
+  display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;
+  text-align:center;
+}
+.dp-icon{font-size:22px;opacity:0.4}
+.dp-label{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--text-dim)}
+.dp-note{font-size:11.5px;color:var(--text-dim);font-style:italic}
+.api-hook{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--teal);background:var(--teal-dim);padding:2px 8px;border-radius:99px;border:1px solid rgba(47,191,173,0.2)}
+
+/* Classification badges */
+.class-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:99px;font-size:12px;font-weight:600;font-family:'JetBrains Mono',monospace;letter-spacing:0.04em}
+.class-high{background:rgba(224,92,92,0.15);color:#e05c5c;border:1px solid rgba(224,92,92,0.3)}
+.class-moderate{background:rgba(232,200,56,0.15);color:#e8c838;border:1px solid rgba(232,200,56,0.3)}
+.class-low{background:rgba(76,175,130,0.15);color:#4caf82;border:1px solid rgba(76,175,130,0.3)}
+.class-dot{width:7px;height:7px;border-radius:50%}
+.class-high .class-dot{background:#e05c5c}
+.class-moderate .class-dot{background:#e8c838}
+.class-low .class-dot{background:#4caf82}
+
+/* Signal indicators */
+.signal-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)}
+.signal-row:last-child{border-bottom:none}
+.signal-label{font-size:12.5px;color:var(--text-mid);display:flex;align-items:center;gap:8px}
+.signal-icon{font-size:14px}
+.signal-strength{display:flex;gap:4px}
+.signal-pip{width:8px;height:8px;border-radius:2px;background:var(--border)}
+.signal-pip.filled-h{background:#e05c5c}
+.signal-pip.filled-m{background:#e8c838}
+.signal-pip.filled-l{background:#4caf82}
+.signal-text{font-family:'JetBrains Mono',monospace;font-size:10.5px;padding:2px 8px;border-radius:99px}
+.signal-strong{background:rgba(224,92,92,0.12);color:#e05c5c}
+.signal-moderate{background:rgba(232,200,56,0.12);color:#e8c838}
+.signal-weak{background:rgba(76,175,130,0.12);color:#4caf82}
+.signal-none{background:var(--navy-3);color:var(--text-dim)}
+
+/* Why box */
+.why-box{background:var(--navy-3);border-left:3px solid var(--amber);border-radius:0 var(--radius-sm) var(--radius-sm) 0;padding:12px 14px;margin-top:12px}
+.why-box-title{font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:0.04em;color:var(--amber);margin-bottom:6px}
+.why-box p{font-size:12.5px;color:var(--text-mid);line-height:1.6}
+
+/* Pipeline steps */
+.pipeline-step{display:flex;gap:14px;padding:14px 0;border-bottom:1px solid var(--border)}
+.pipeline-step:last-child{border-bottom:none}
+.step-num{width:28px;height:28px;border-radius:50%;background:var(--navy-4);border:1px solid var(--border-strong);display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--amber);flex-shrink:0;margin-top:2px}
+.step-body h4{font-size:13.5px;font-weight:600;color:var(--text-bright);margin-bottom:4px}
+.step-body p{font-size:12.5px;color:var(--text-mid);line-height:1.55}
+.step-tag{font-family:'JetBrains Mono',monospace;font-size:10px;padding:2px 7px;border-radius:99px;margin-top:6px;display:inline-block}
+.tag-satellite{background:rgba(47,191,173,0.12);color:var(--teal);border:1px solid rgba(47,191,173,0.2)}
+.tag-logic{background:rgba(232,168,56,0.12);color:var(--amber);border:1px solid rgba(232,168,56,0.2)}
+.tag-future{background:rgba(79,148,240,0.12);color:#4f94f0;border:1px solid rgba(79,148,240,0.2)}
+.tag-community{background:rgba(76,175,130,0.12);color:var(--green);border:1px solid rgba(76,175,130,0.2)}
+
+/* Explanation expand */
+.expand-section{border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;margin-bottom:8px}
+.expand-header{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;cursor:pointer;background:var(--navy-3);transition:background 0.15s}
+.expand-header:hover{background:var(--navy-4)}
+.expand-header-left{display:flex;align-items:center;gap:10px}
+.expand-title{font-size:13px;font-weight:500;color:var(--text-bright)}
+.expand-icon{font-size:12px;color:var(--text-dim);transition:transform 0.2s;font-family:'JetBrains Mono',monospace}
+.expand-content{display:none;padding:14px;background:var(--navy-2);font-size:12.5px;color:var(--text-mid);line-height:1.65;border-top:1px solid var(--border)}
+.expand-content.open{display:block}
+
+/* Corridor placeholder card */
+.corridor-card{background:var(--navy-3);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:10px}
+.corridor-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px}
+.corridor-name{font-size:14px;font-weight:600;color:var(--text-bright)}
+.corridor-sub{font-size:12px;color:var(--text-dim);margin-top:2px}
+.corridor-signals{margin-top:12px}
+.why-toggle{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--amber);cursor:pointer;border:none;background:none;padding:4px 0;margin-top:8px}
+.why-toggle:hover{text-decoration:underline}
+.why-detail{display:none;margin-top:8px}
+.why-detail.open{display:block}
+
+/* Grid helpers */
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:99px}
+
+/* ============================================================
+   MAP PAGE
+   ============================================================ */
+#map-sidebar{width:280px;min-width:280px;background:var(--navy-2);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;padding:16px}
+#map-area{flex:1;background:var(--navy);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;position:relative}
+.map-overlay-panel{position:absolute;top:16px;right:16px;background:var(--navy-2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;width:260px;max-height:calc(100% - 32px);overflow-y:auto}
+.layer-toggle-btn{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--radius-sm);background:none;border:1px solid var(--border);width:100%;text-align:left;cursor:pointer;margin-bottom:6px;transition:all 0.15s;color:var(--text-mid);font-size:12.5px;font-family:'Plus Jakarta Sans',sans-serif}
+.layer-toggle-btn.active{background:var(--navy-4);border-color:var(--amber);color:var(--amber)}
+.layer-toggle-btn .lt-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.layer-overlay{display:none;margin-bottom:10px;background:var(--navy-3);border-radius:var(--radius-sm);padding:10px;font-size:12px;color:var(--text-mid);line-height:1.55;border-left:2px solid var(--amber)}
+.layer-overlay.visible{display:block}
+.map-placeholder-text{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--text-dim);text-align:center;max-width:380px;line-height:1.7}
+.map-grid{display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(6,1fr);gap:2px;width:460px;height:280px;opacity:0.25}
+.map-cell{background:var(--navy-3);border-radius:2px}
+.map-cell:nth-child(3n){background:var(--navy-4)}
+.map-cell:nth-child(7n){background:var(--slate)}
+.map-label{font-family:'Plus Jakarta Sans',sans-serif;font-size:18px;color:var(--text-dim);opacity:0.5}
+
+/* ============================================================
+   AI ASSISTANT
+   ============================================================ */
+.assistant-header{background:var(--navy-2);border-bottom:1px solid var(--border);padding:18px 24px;display:flex;align-items:center;gap:14px;flex-shrink:0}
+.assistant-icon{width:40px;height:40px;border-radius:var(--radius-sm);background:var(--navy-4);border:1px solid var(--border-strong);display:flex;align-items:center;justify-content:center;font-size:20px}
+.assistant-meta{flex:1}
+.assistant-meta h2{font-family:'Plus Jakarta Sans',sans-serif;font-size:18px;color:var(--text-bright)}
+.assistant-meta p{font-size:12px;color:var(--text-mid);margin-top:2px}
+.assistant-badge{font-family:'JetBrains Mono',monospace;font-size:10px;padding:3px 9px;border-radius:99px;background:var(--teal-dim);color:var(--teal);border:1px solid rgba(47,191,173,0.2)}
+.chat-messages{flex:1;overflow-y:auto;padding:20px 24px;display:flex;flex-direction:column;gap:12px}
+.msg{display:flex;gap:10px;max-width:720px}
+.msg.user{flex-direction:row-reverse;align-self:flex-end}
+.msg.bot{align-self:flex-start}
+.msg-icon{width:30px;height:30px;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px}
+.msg-icon.bot{background:var(--navy-4);border:1px solid var(--border)}
+.msg-icon.user{background:var(--amber-dim);border:1px solid rgba(232,168,56,0.2)}
+.msg-bubble{padding:11px 14px;border-radius:var(--radius-sm);font-size:13px;line-height:1.6}
+.msg-bubble.bot{background:var(--navy-2);border:1px solid var(--border);color:var(--text-bright);border-radius:2px 8px 8px 8px}
+.msg-bubble.user{background:var(--navy-4);border:1px solid var(--border-strong);color:var(--text-bright);border-radius:8px 2px 8px 8px}
+.msg-time{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--text-dim);margin-top:3px}
+.chat-suggestions{padding:10px 24px;background:var(--navy-2);border-top:1px solid var(--border);display:flex;gap:6px;flex-wrap:wrap;flex-shrink:0}
+.sugg-chip{padding:5px 12px;border-radius:99px;background:var(--navy-3);border:1px solid var(--border);font-size:11.5px;color:var(--text-mid);cursor:pointer;transition:all 0.15s;font-family:'Plus Jakarta Sans',sans-serif}
+.sugg-chip:hover{border-color:var(--amber);color:var(--amber)}
+.chat-input-area{padding:12px 24px 16px;background:var(--navy-2);border-top:1px solid var(--border);display:flex;gap:10px;flex-shrink:0}
+.chat-input{flex:1;background:var(--navy-3);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;font-size:13px;color:var(--text-bright);font-family:'Plus Jakarta Sans',sans-serif;outline:none;transition:border-color 0.15s}
+.chat-input:focus{border-color:rgba(232,168,56,0.4)}
+.chat-input::placeholder{color:var(--text-dim)}
+.chat-send{padding:10px 18px;background:var(--amber);color:var(--navy);border:none;border-radius:var(--radius-sm);font-weight:600;font-size:13px;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif;transition:background 0.15s}
+.chat-send:hover{background:var(--amber-bright)}
+.typing-dots{display:flex;gap:4px;padding:4px 0}
+.typing-dots span{width:6px;height:6px;border-radius:50%;background:var(--text-dim);animation:tdot 1.2s infinite}
+.typing-dots span:nth-child(2){animation-delay:0.2s}
+.typing-dots span:nth-child(3){animation-delay:0.4s}
+@keyframes tdot{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-5px)}}
+
+/* ============================================================
+   SCROLLBAR IN CHAT
+   ============================================================ */
+.chat-messages::-webkit-scrollbar{width:4px}
+.chat-messages::-webkit-scrollbar-thumb{background:var(--border-strong)}
+
+/* ============================================================
+   FADE IN
+   ============================================================ */
+.page.active > *{animation:fadeUp 0.25s ease both}
+.page.active > *:nth-child(2){animation-delay:0.05s}
+.page.active > *:nth-child(3){animation-delay:0.1s}
+.page.active > *:nth-child(4){animation-delay:0.15s}
+.page.active > *:nth-child(5){animation-delay:0.2s}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* ============================================================
+   EXPLANATION / HIGHLIGHT
+   ============================================================ */
+.highlight-amber{color:var(--amber);font-weight:500}
+.highlight-teal{color:var(--teal)}
+.highlight-red{color:var(--red)}
+.rule-list{padding-left:0;list-style:none;margin-top:8px}
+.rule-list li{padding:5px 0 5px 16px;position:relative;font-size:12.5px;color:var(--text-mid);line-height:1.55;border-bottom:1px solid var(--border)}
+.rule-list li:last-child{border-bottom:none}
+.rule-list li::before{content:'→';position:absolute;left:0;color:var(--amber);font-family:'JetBrains Mono',monospace;font-size:10.5px}
+
+/* CONCEPT BOX */
+.concept-box{background:linear-gradient(135deg,var(--navy-3),var(--navy-4));border:1px solid var(--border-strong);border-radius:var(--radius);padding:18px 20px}
+.concept-box h3{font-family:'Plus Jakarta Sans',sans-serif;font-size:17px;color:var(--text-bright);margin-bottom:10px}
+.concept-box p{font-size:13px;color:var(--text-mid);line-height:1.65}
+
+/* DECISION MATRIX */
+.decision-row{display:grid;grid-template-columns:200px 1fr auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)}
+.decision-row:last-child{border-bottom:none}
+.decision-condition{font-size:12.5px;color:var(--text-mid)}
+.decision-result{font-size:12px;color:var(--text-dim);font-style:italic}
+</style>
+</head>
+<body>
+
+<!-- PROTOTYPE BANNER -->
+<div id="proto-banner">
+  <div class="banner-left">
+    <div class="banner-dot"></div>
+    <span class="banner-text">PROTOTYPE INTERFACE — No live backend connected. Forecast outputs represent structural examples only.</span>
+  </div>
+  <span class="banner-badge">v0.1 Prototype</span>
+</div>
+
+<div id="app">
+
+<!-- ===================== SIDEBAR ===================== -->
+<aside id="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-title">Cattle Movement<br>Forecasting System</div>
+    <div class="logo-sub">Satellite-Driven · Prototype</div>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="nav-section-label">Overview</div>
+    <button class="nav-btn active" data-page="dashboard">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      Dashboard
+    </button>
+    <button class="nav-btn" data-page="about">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      About the Model
+    </button>
+    <div class="nav-section-label">Analysis</div>
+    <button class="nav-btn" data-page="map">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
+      Corridor Map
+    </button>
+    <button class="nav-btn" data-page="corridors">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+      Corridor Forecasts
+    </button>
+    <button class="nav-btn" data-page="explainability">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/></svg>
+      Explainability
+    </button>
+    <button class="nav-btn" data-page="community">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Community Reports
+    </button>
+    <div class="nav-section-label">Tools</div>
+    <button class="nav-btn" data-page="assistant">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      Explainability Assistant
+    </button>
+    <button class="nav-btn" data-page="pipeline">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+      Technical Pipeline
+    </button>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="integration-badge">
+      <div class="ib-label">Backend Status</div>
+      <div class="ib-status"><div class="ib-dot"></div> Not Connected</div>
+    </div>
+  </div>
+</aside>
+
+<!-- ===================== MAIN ===================== -->
+<main id="main">
+
+<!-- ===== DASHBOARD ===== -->
+<div id="page-dashboard" class="page active">
+  <div class="page-header">
+    <h1>System Dashboard</h1>
+    <p>Satellite-driven cattle movement forecasting — frontend prototype structure. Connect a backend data layer to activate live forecasts.</p>
+  </div>
+
+  <!-- Concept summary -->
+  <div class="concept-box">
+    <h3>How This System Works</h3>
+    <p>This system does <strong style="color:var(--text-bright)">not</strong> track individual animals. Instead, it models <span class="highlight-amber">environmental conditions</span> — vegetation health, water availability, terrain accessibility, and community-reported conditions — that strongly predict where pastoral herds will move. When multiple environmental signals agree, the system generates a <span class="highlight-teal">movement corridor forecast</span> classified as High, Moderate, or Low likelihood. The logic mirrors how pastoralists actually make decisions: animals move toward resources, away from scarcity.</p>
+  </div>
+
+  <div class="grid-2">
+    <!-- Signal Status Panel -->
+    <div class="card">
+      <div class="card-title">Signal Inputs <span class="api-hook">API: /signals/status</span></div>
+      <div class="data-placeholder" style="min-height:60px;margin-bottom:12px">
+        <div class="dp-icon">🛰️</div>
+        <div class="dp-label">No satellite data connected</div>
+        <div class="dp-note">Backend integration required for live signal ingestion</div>
+      </div>
+      <div class="signal-row">
+        <span class="signal-label"><span class="signal-icon">🌿</span>Vegetation (NDVI)</span>
+        <span class="signal-text signal-none">Awaiting data</span>
+      </div>
+      <div class="signal-row">
+        <span class="signal-label"><span class="signal-icon">💧</span>Water Accessibility</span>
+        <span class="signal-text signal-none">Awaiting data</span>
+      </div>
+      <div class="signal-row">
+        <span class="signal-label"><span class="signal-icon">⛰️</span>Terrain Feasibility</span>
+        <span class="signal-text signal-none">Awaiting data</span>
+      </div>
+      <div class="signal-row">
+        <span class="signal-label"><span class="signal-icon">🌧️</span>Precipitation Trend</span>
+        <span class="signal-text signal-none">Awaiting data</span>
+      </div>
+      <div class="signal-row">
+        <span class="signal-label"><span class="signal-icon">👥</span>Community Reports</span>
+        <span class="signal-text signal-none">Awaiting data</span>
+      </div>
+    </div>
+
+    <!-- Active Corridors -->
+    <div class="card">
+      <div class="card-title">Active Forecast Corridors <span class="api-hook">API: /corridors/active</span></div>
+      <div class="data-placeholder" style="min-height:180px">
+        <div class="dp-icon">📍</div>
+        <div class="dp-label">No corridors loaded</div>
+        <div class="dp-note">Live forecasts require satellite data processing backend. Structural example below.</div>
+      </div>
+      <div style="margin-top:12px;padding:10px;background:var(--navy-3);border-radius:var(--radius-sm);border:1px dashed rgba(232,168,56,0.2)">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--amber);margin-bottom:6px">STRUCTURAL EXAMPLE ONLY</div>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:12.5px;color:var(--text-mid)">Corridor: Region A → Water Source X</span>
+          <span class="class-badge class-high"><span class="class-dot"></span>High</span>
+        </div>
+        <div style="font-size:11.5px;color:var(--text-dim);margin-top:4px;font-style:italic">Why: Multiple strong environmental signals converging — see Explainability section</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Classification explainer -->
+  <div class="card">
+    <div class="card-title">How Classifications Are Determined</div>
+    <p style="font-size:13px;color:var(--text-mid);margin-bottom:14px;line-height:1.6">Instead of arbitrary percentages, this system uses a <span class="highlight-amber">3-tier classification</span> based on signal agreement. Here is the decision logic:</p>
+    <div class="decision-row">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--text-mid);margin-bottom:3px">INPUT CONDITION</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--text-dim)">REASONING</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--text-dim)">OUTPUT</div>
+    </div>
+    <div class="decision-row">
+      <div class="decision-condition">3+ strong signals agree (e.g. low NDVI + dry water points + community confirms movement)</div>
+      <div class="decision-result">High environmental pressure + empirical confirmation = strong prediction basis</div>
+      <span class="class-badge class-high"><span class="class-dot"></span>High</span>
+    </div>
+    <div class="decision-row">
+      <div class="decision-condition">Mixed signals — some indicators strong, others unavailable or moderate</div>
+      <div class="decision-result">Partial evidence. Movement possible but uncertain. More observation needed.</div>
+      <span class="class-badge class-moderate"><span class="class-dot"></span>Moderate</span>
+    </div>
+    <div class="decision-row">
+      <div class="decision-condition">Weak environmental stress, resources adequate, no community confirmation</div>
+      <div class="decision-result">No strong pressure driving movement. Low likelihood of significant corridor activity.</div>
+      <span class="class-badge class-low"><span class="class-dot"></span>Low</span>
+    </div>
+    <div class="why-box">
+      <div class="why-box-title">Why not percentages?</div>
+      <p>Using a percentage like "89% likelihood" implies a precision that doesn't exist in this type of environmental modeling. A classification like <span class="highlight-amber">High</span> is more honest — it communicates that multiple independent signals agree this corridor is active, without falsely implying exact quantitative certainty. Precision should match the actual quality of the data.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== ABOUT THE MODEL ===== -->
+<div id="page-about" class="page">
+  <div class="page-header">
+    <h1>About the Model</h1>
+    <p>A complete explanation of how this system works, why it is effective, and what it does and does not claim to do.</p>
+  </div>
+
+  <div class="concept-box">
+    <h3>The Core Insight</h3>
+    <p>Pastoral herd movements are not random. They are <span class="highlight-amber">environmentally determined decisions</span>. Pastoralists have millennia of knowledge about which environmental signals — water, vegetation, terrain, risk — should prompt movement and in which direction. This system works because it operationalizes that same decision logic using satellite remote sensing. It models the environment that drives the decision, not the decision itself.</p>
+  </div>
+
+  <div class="card">
+    <div class="card-title">How the System Works — Step by Step</div>
+    <div class="pipeline-step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <h4>Satellite Data Detects Environmental Conditions</h4>
+        <p>Satellites observe vegetation health (NDVI), water body extent, soil moisture, terrain slope, and flood extent across the target region. These signals change over days and weeks and directly reflect whether an area can support a herd.</p>
+        <span class="step-tag tag-satellite">VIIRS · Sentinel-1 · SMAP · GPM IMERG</span>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <h4>Accessibility Modeling Evaluates Viable Routes</h4>
+        <p>Not all terrain is traversable. A GIS processing layer evaluates which areas are physically accessible — accounting for slope, flooding, road infrastructure, and known barriers. This produces a <span class="highlight-amber">movement feasibility surface</span> across the region.</p>
+        <span class="step-tag tag-satellite">GIS · DEM Analysis · Flood Masking</span>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <h4>Community Reporting Adds Real-World Confirmation</h4>
+        <p>Pastoralist communities, field monitors, and local NGO workers submit structured field reports via mobile or radio. These reports confirm or contradict what satellite data suggests — providing <span class="highlight-teal">ground truth</span> that satellites cannot capture (e.g., a local conflict, a broken water pump, a newly opened gate).</p>
+        <span class="step-tag tag-community">Community Network · Field Reports</span>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <h4>Rule-Based Environmental Scoring Generates Likelihood</h4>
+        <p>A scoring engine evaluates each potential corridor based on: how strong each environmental signal is, whether signals agree or conflict, and whether community reports confirm the pattern. The result is a <span class="highlight-amber">High / Moderate / Low</span> classification — not a fake percentage. Each classification is fully explainable from the signal inputs.</p>
+        <span class="step-tag tag-logic">Rule Engine · Signal Weighting · Decision Logic</span>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <h4>System Outputs Probabilistic Movement Corridors</h4>
+        <p>The final output is a map of <span class="highlight-teal">probable movement corridors</span> — spatial paths where herd movement is environmentally motivated. These corridors help humanitarian organizations pre-position resources, prevent conflicts, and plan interventions. <strong style="color:var(--text-bright)">Individual animals are never tracked.</strong></p>
+        <span class="step-tag tag-future">Future: ML model trained on historical movement patterns</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Why This System Works Well</div>
+    <ul class="rule-list">
+      <li><strong style="color:var(--text-bright)">Environmental signals are strong predictors.</strong> Decades of pastoral research confirm that herds move toward water and vegetation. These signals are reliable and measurable from space.</li>
+      <li><strong style="color:var(--text-bright)">Multi-source agreement reduces error.</strong> When NDVI, water availability, soil moisture, and community reports all point the same direction, confidence is high. Disagreement between sources is itself informative — it flags uncertainty honestly.</li>
+      <li><strong style="color:var(--text-bright)">Community reporting fills satellite blind spots.</strong> Satellites can't see a broken borehole or a tribe conflict blocking a route. Community reports catch what remote sensing misses.</li>
+      <li><strong style="color:var(--text-bright)">Tracking decisions, not animals, is more scalable.</strong> Environmental data covers entire regions simultaneously. You don't need a sensor on every animal — you need to understand what drives the decision.</li>
+      <li><strong style="color:var(--text-bright)">Rule-based logic is transparent and auditable.</strong> Unlike a black-box ML model, every classification can be traced back to specific signal inputs. This matters for humanitarian accountability.</li>
+      <li><strong style="color:var(--text-bright)">The system improves with ground truth data.</strong> Every confirmed movement adds to the historical record. Future ML integration will use this data to improve predictions over time.</li>
+    </ul>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">What This System Claims</div>
+      <ul class="rule-list">
+        <li>That environmental conditions predict movement direction</li>
+        <li>That multi-signal agreement increases forecast reliability</li>
+        <li>That corridor classifications are explainable from inputs</li>
+        <li>That community reports improve forecast accuracy</li>
+        <li>That this can be operationalized with backend data integration</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-title">What This System Does NOT Claim</div>
+      <ul class="rule-list">
+        <li>It does <em>not</em> track individual animals</li>
+        <li>It does <em>not</em> generate precise timing predictions</li>
+        <li>It does <em>not</em> replace local pastoral knowledge</li>
+        <li>It does <em>not</em> work without quality satellite data inputs</li>
+        <li>It does <em>not</em> provide exact percentages — classifications are qualitative</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MAP ===== -->
+<div id="page-map" class="page">
+  <div id="map-sidebar">
+    <div style="margin-bottom:16px">
+      <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;color:var(--text-bright);margin-bottom:4px">Corridor Map</div>
+      <div style="font-size:12px;color:var(--text-dim);line-height:1.5">Frontend placeholder — no geospatial data connected. Layer toggles show conceptual explanations.</div>
+    </div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-dim);margin-bottom:8px">Map Layers</div>
+    <button class="layer-toggle-btn" onclick="toggleLayer(this,'veg')"><span class="lt-dot" style="background:#4caf82"></span>Vegetation (NDVI)</button>
+    <div class="layer-overlay" id="overlay-veg">
+      <strong style="color:var(--amber);font-size:11px;font-family:'JetBrains Mono',monospace">VEGETATION LAYER</strong><br><br>
+      Shows NDVI values across the region. Areas with <strong>declining NDVI</strong> (vegetation stress) create <strong>push pressure</strong> — herds are environmentally motivated to leave. This is typically the strongest single predictor of outbound movement.<br><br>
+      <em>API: GET /satellite/ndvi?region=&date_range=</em>
+    </div>
+    <button class="layer-toggle-btn" onclick="toggleLayer(this,'water')"><span class="lt-dot" style="background:#4f94f0"></span>Water Sources</button>
+    <div class="layer-overlay" id="overlay-water">
+      <strong style="color:var(--amber);font-size:11px;font-family:'JetBrains Mono',monospace">WATER LAYER</strong><br><br>
+      Maps water body extent, seasonal river flow, boreholes, and water point operational status. Water scarcity is the most urgent movement trigger. Healthy water points create <strong>pull pressure</strong> — corridors run toward them.<br><br>
+      <em>API: GET /satellite/water?region=&date_range=</em>
+    </div>
+    <button class="layer-toggle-btn" onclick="toggleLayer(this,'terrain')"><span class="lt-dot" style="background:#b4885a"></span>Terrain & Access</button>
+    <div class="layer-overlay" id="overlay-terrain">
+      <strong style="color:var(--amber);font-size:11px;font-family:'JetBrains Mono',monospace">TERRAIN LAYER</strong><br><br>
+      Derived from Digital Elevation Models. Steep slopes, flooded areas, and impassable barriers are masked out of the accessibility surface. Only feasible terrain contributes to corridor modeling. A geographically plausible corridor must avoid these zones.<br><br>
+      <em>API: GET /gis/terrain?region=&elevation_threshold=</em>
+    </div>
+    <button class="layer-toggle-btn" onclick="toggleLayer(this,'community')"><span class="lt-dot" style="background:#e8c838"></span>Community Reports</button>
+    <div class="layer-overlay" id="overlay-community">
+      <strong style="color:var(--amber);font-size:11px;font-family:'JetBrains Mono',monospace">COMMUNITY LAYER</strong><br><br>
+      Georeferenced field reports from pastoralists and monitors. Confirmed sightings, water point status, conflict zones, and route conditions are displayed. When community data aligns with satellite signals, <strong>classification confidence increases</strong>.<br><br>
+      <em>API: GET /community/reports?region=&verified=true</em>
+    </div>
+    <button class="layer-toggle-btn" onclick="toggleLayer(this,'risk')"><span class="lt-dot" style="background:#e05c5c"></span>Risk Zones</button>
+    <div class="layer-overlay" id="overlay-risk">
+      <strong style="color:var(--amber);font-size:11px;font-family:'JetBrains Mono',monospace">RISK LAYER</strong><br><br>
+      Identifies zones with active conflict, disease alerts, or infrastructure failure. Risk zones reduce movement likelihood through those areas — corridors are modeled around them or downgraded to Moderate / Low if the only route passes through a risk zone.<br><br>
+      <em>API: GET /risk/zones?region=&severity_min=2</em>
+    </div>
+    <div style="margin-top:16px;padding:12px;background:var(--navy-3);border-radius:var(--radius-sm);border:1px dashed rgba(232,168,56,0.2)">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--amber);margin-bottom:5px">MAP BACKEND REQUIREMENTS</div>
+      <div style="font-size:11.5px;color:var(--text-dim);line-height:1.55">Live map requires: GIS tile server, satellite data pipeline, geospatial database (PostGIS), and corridor computation service.</div>
+    </div>
+  </div>
+  <div id="map-area">
+    <div class="map-grid">
+      <div class="map-cell"></div><div class="map-cell"></div><div class="map-cell"></div><div class="map-cell"></div><div class="map-cell"></div><div class="map-cell"></div><div class="map-cell"></div><div class="map-cell"></div>
+      <div class="map-cell"></div><div class="map-cell"></div><div class="map-cell"></div><div class="map-cell"></div><div class="map-cell"></div><div class="map-cell"></div><div class="map-cell"></div><div class="map-cell"></div>
+      <div class="map-cell"></div><div class="map-cell"></div><div class="map-cell"></div><div class="map-cell"></div><div class="map-cell"></div><div class="map-cell"></div><div class="map-cell"></div><div class="map-cell"></div>
+      <div class="map-cell"></div><div class="map-cell"></div><div class="map-cell"></div><div class="map-cell"></div><div class="map-cell"></div><div class="map-cell"></div><div class="map-cell"></div><div class="map-cell"></div>
+      <div class="map-cell"></div><div class="map-cell"></div><div class="map-cell"></div><div class="map-cell"></div><div class="map-cell"></div><div class="map-cell"></div><div class="map-cell"></div><div class="map-cell"></div>
+      <div class="map-cell"></div><div class="map-cell"></div><div class="map-cell"></div><div class="map-cell"></div><div class="map-cell"></div><div class="map-cell"></div><div class="map-cell"></div><div class="map-cell"></div>
+    </div>
+    <div class="map-label">Map Placeholder</div>
+    <div class="map-placeholder-text">
+      No live geospatial data connected.<br>
+      Toggle layers on the left to see conceptual explanations of each data source.<br><br>
+      <span style="color:var(--amber)">Backend integration point:</span> This area will render a Leaflet.js or Mapbox map displaying satellite-derived layers and corridor overlays once connected to the geospatial processing backend.
+    </div>
+  </div>
+</div>
+
+<!-- ===== CORRIDOR FORECASTS ===== -->
+<div id="page-corridors" class="page">
+  <div class="page-header">
+    <h1>Corridor Forecasts</h1>
+    <p>Structural examples showing how corridor classifications are presented and explained. No live data — backend integration required.</p>
+  </div>
+
+  <div style="background:var(--navy-3);border:1px solid rgba(232,168,56,0.25);border-radius:var(--radius);padding:14px 16px;display:flex;align-items:center;gap:10px">
+    <span style="font-size:18px">ℹ️</span>
+    <div>
+      <div style="font-size:13.5px;font-weight:500;color:var(--text-bright);margin-bottom:3px">These are structural examples, not live forecasts</div>
+      <div style="font-size:12.5px;color:var(--text-mid)">Real corridor data requires satellite signal ingestion and backend processing. The examples below demonstrate how a classification is displayed and — critically — <em>why</em> it receives that classification.</div>
+    </div>
+  </div>
+
+  <!-- Example 1: High -->
+  <div class="corridor-card">
+    <div class="corridor-header">
+      <div>
+        <div class="corridor-name">Corridor: [Region A] → [Water Source B]</div>
+        <div class="corridor-sub">Example corridor · Structural demonstration only</div>
+      </div>
+      <span class="class-badge class-high"><span class="class-dot"></span>High Likelihood</span>
+    </div>
+    <div class="corridor-signals">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px">Signal Inputs That Led to This Classification</div>
+      <div class="signal-row"><span class="signal-label"><span class="signal-icon">🌿</span>Vegetation (NDVI)</span><span class="signal-text signal-strong">Strong signal</span></div>
+      <div class="signal-row"><span class="signal-label"><span class="signal-icon">💧</span>Water Accessibility</span><span class="signal-text signal-strong">Strong signal</span></div>
+      <div class="signal-row"><span class="signal-label"><span class="signal-icon">⛰️</span>Terrain Feasibility</span><span class="signal-text signal-moderate">Moderate signal</span></div>
+      <div class="signal-row"><span class="signal-label"><span class="signal-icon">🌧️</span>Precipitation Trend</span><span class="signal-text signal-strong">Strong signal</span></div>
+      <div class="signal-row"><span class="signal-label"><span class="signal-icon">👥</span>Community Reports</span><span class="signal-text signal-strong">Confirmed</span></div>
+    </div>
+    <button class="why-toggle" onclick="toggleWhy(this)">▶ WHY IS THIS "HIGH"? — click to expand</button>
+    <div class="why-detail">
+      <div class="why-box">
+        <div class="why-box-title">Why This Classification is High</div>
+        <p><strong style="color:var(--text-bright)">Vegetation signal is strong:</strong> NDVI values in the origin area have declined significantly, meaning forage is critically depleted. This creates strong environmental pressure to move — animals cannot stay.</p>
+        <br>
+        <p><strong style="color:var(--text-bright)">Water accessibility creates a clear pull:</strong> The destination water source has been confirmed operational by satellite water body detection and community reports. There is a known, viable endpoint for the movement.</p>
+        <br>
+        <p><strong style="color:var(--text-bright)">Community reports confirm the pattern:</strong> Field monitors have submitted reports consistent with outbound movement along this corridor. This is the most important signal — it means the environmental prediction is corroborated by direct observation.</p>
+        <br>
+        <p><strong style="color:var(--text-bright)">Precipitation trend supports the direction:</strong> Rainfall deficits in the origin area and recent precipitation near the destination reinforce the push-pull dynamic.</p>
+        <br>
+        <p style="color:var(--amber)">Summary: 4 of 5 signals are strong or confirmed. The only uncertainty is terrain (some route sections have limited accessibility data). Multi-source agreement at this level justifies a High classification.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Example 2: Moderate -->
+  <div class="corridor-card">
+    <div class="corridor-header">
+      <div>
+        <div class="corridor-name">Corridor: [Region C] → [Seasonal Wetland D]</div>
+        <div class="corridor-sub">Example corridor · Structural demonstration only</div>
+      </div>
+      <span class="class-badge class-moderate"><span class="class-dot"></span>Moderate Likelihood</span>
+    </div>
+    <div class="corridor-signals">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px">Signal Inputs That Led to This Classification</div>
+      <div class="signal-row"><span class="signal-label"><span class="signal-icon">🌿</span>Vegetation (NDVI)</span><span class="signal-text signal-moderate">Moderate signal</span></div>
+      <div class="signal-row"><span class="signal-label"><span class="signal-icon">💧</span>Water Accessibility</span><span class="signal-text signal-weak">Weak signal</span></div>
+      <div class="signal-row"><span class="signal-label"><span class="signal-icon">⛰️</span>Terrain Feasibility</span><span class="signal-text signal-strong">Strong signal</span></div>
+      <div class="signal-row"><span class="signal-label"><span class="signal-icon">🌧️</span>Precipitation Trend</span><span class="signal-text signal-moderate">Moderate signal</span></div>
+      <div class="signal-row"><span class="signal-label"><span class="signal-icon">👥</span>Community Reports</span><span class="signal-text signal-none">No data</span></div>
+    </div>
+    <button class="why-toggle" onclick="toggleWhy(this)">▶ WHY IS THIS "MODERATE"? — click to expand</button>
+    <div class="why-detail">
+      <div class="why-box">
+        <div class="why-box-title">Why This Classification is Moderate, Not High</div>
+        <p><strong style="color:var(--text-bright)">Mixed evidence:</strong> Vegetation stress is present but not severe — some forage remains in the origin area, reducing urgency. There is pressure to move, but it is not critical.</p>
+        <br>
+        <p><strong style="color:var(--text-bright)">Water destination is uncertain:</strong> The seasonal wetland destination has <em>reduced</em> water extent compared to historical averages — meaning the pull factor is weaker than usual. Herds may arrive to find limited water.</p>
+        <br>
+        <p><strong style="color:var(--text-bright)">No community confirmation:</strong> This is the critical gap. Without any field reports confirming movement initiation, we have satellite signals only. Environmental pressure is real but unconfirmed by observation.</p>
+        <br>
+        <p style="color:var(--yellow)">Summary: 2 moderate signals + 1 strong terrain signal + no community data = Moderate. Movement is environmentally plausible but not confirmed. This corridor warrants monitoring.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Example 3: Low -->
+  <div class="corridor-card">
+    <div class="corridor-header">
+      <div>
+        <div class="corridor-name">Corridor: [Region E] → [River F]</div>
+        <div class="corridor-sub">Example corridor · Structural demonstration only</div>
+      </div>
+      <span class="class-badge class-low"><span class="class-dot"></span>Low Likelihood</span>
+    </div>
+    <div class="corridor-signals">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px">Signal Inputs That Led to This Classification</div>
+      <div class="signal-row"><span class="signal-label"><span class="signal-icon">🌿</span>Vegetation (NDVI)</span><span class="signal-text signal-weak">Weak signal</span></div>
+      <div class="signal-row"><span class="signal-label"><span class="signal-icon">💧</span>Water Accessibility</span><span class="signal-text signal-weak">Weak signal</span></div>
+      <div class="signal-row"><span class="signal-label"><span class="signal-icon">⛰️</span>Terrain Feasibility</span><span class="signal-text signal-moderate">Moderate signal</span></div>
+      <div class="signal-row"><span class="signal-label"><span class="signal-icon">🌧️</span>Precipitation Trend</span><span class="signal-text signal-weak">Weak signal</span></div>
+      <div class="signal-row"><span class="signal-label"><span class="signal-icon">👥</span>Community Reports</span><span class="signal-text signal-none">No movement reported</span></div>
+    </div>
+    <button class="why-toggle" onclick="toggleWhy(this)">▶ WHY IS THIS "LOW"? — click to expand</button>
+    <div class="why-detail">
+      <div class="why-box">
+        <div class="why-box-title">Why This Classification is Low</div>
+        <p><strong style="color:var(--text-bright)">No environmental pressure to move:</strong> NDVI in the origin area is normal. Vegetation is adequate. There is no push factor — animals have sufficient forage where they are.</p>
+        <br>
+        <p><strong style="color:var(--text-bright)">Destination is not attractive:</strong> Water body extent near River F has not changed significantly. There is no unusual pull factor that would motivate movement in this direction.</p>
+        <br>
+        <p><strong style="color:var(--text-bright)">Community reports confirm stability:</strong> Field monitors report normal conditions and no observed movement initiation.</p>
+        <br>
+        <p style="color:var(--green)">Summary: All signals are weak or stable. No push. No pull. No community confirmation. Low classification is the correct and honest output. The system should not generate false urgency.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== EXPLAINABILITY ===== -->
+<div id="page-explainability" class="page">
+  <div class="page-header">
+    <h1>Explainability</h1>
+    <p>Understanding every classification decision — the signals, the logic, and the limitations.</p>
+  </div>
+
+  <div class="concept-box">
+    <h3>Why Explainability Matters</h3>
+    <p>In humanitarian applications, a forecast that cannot be explained is a forecast that cannot be trusted. Every output from this system must be traceable back to specific observable inputs. If a signal is unavailable, that uncertainty must be visible — not hidden behind a confident-looking number. This section documents the full decision logic of the classification engine.</p>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Signal Weighting Logic</div>
+    <p style="font-size:13px;color:var(--text-mid);margin-bottom:14px;line-height:1.6">Each signal contributes differently to the corridor classification. The relative importance of signals depends on which are available and their agreement.</p>
+    <div class="signal-row">
+      <span class="signal-label"><span class="signal-icon">👥</span><strong style="color:var(--text-bright)">Community Reports</strong></span>
+      <div style="flex:1;padding:0 14px;font-size:12px;color:var(--text-dim)">Highest weight. Directly observational. Overrides satellite-only signals if confirmed. A confirmed community report of movement initiation is the strongest possible signal.</div>
+    </div>
+    <div class="signal-row">
+      <span class="signal-label"><span class="signal-icon">🌿</span><strong style="color:var(--text-bright)">Vegetation (NDVI)</strong></span>
+      <div style="flex:1;padding:0 14px;font-size:12px;color:var(--text-dim)">Very high weight. The most reliable satellite predictor. NDVI decline below a threshold consistently precedes movement in documented pastoral systems.</div>
+    </div>
+    <div class="signal-row">
+      <span class="signal-label"><span class="signal-icon">💧</span><strong style="color:var(--text-bright)">Water Accessibility</strong></span>
+      <div style="flex:1;padding:0 14px;font-size:12px;color:var(--text-dim)">Very high weight. Water scarcity is the most urgent trigger. Water point operational status (from community reports + satellite) is critical.</div>
+    </div>
+    <div class="signal-row">
+      <span class="signal-label"><span class="signal-icon">🌧️</span><strong style="color:var(--text-bright)">Precipitation Trend</strong></span>
+      <div style="flex:1;padding:0 14px;font-size:12px;color:var(--text-dim)">High weight. Precipitation deficit drives both vegetation stress and water scarcity — it is the upstream cause of most movement pressure.</div>
+    </div>
+    <div class="signal-row">
+      <span class="signal-label"><span class="signal-icon">⛰️</span><strong style="color:var(--text-bright)">Terrain Feasibility</strong></span>
+      <div style="flex:1;padding:0 14px;font-size:12px;color:var(--text-dim)">Moderate weight. Acts as a constraint rather than a driver. Does not create movement pressure but determines which routes are physically viable.</div>
+    </div>
+    <div class="signal-row">
+      <span class="signal-label"><span class="signal-icon">⚠️</span><strong style="color:var(--text-bright)">Risk Zones</strong></span>
+      <div style="flex:1;padding:0 14px;font-size:12px;color:var(--text-dim)">Modifier. Active risk zones (conflict, disease, infrastructure failure) reduce classification by one tier if the route passes through them.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Honest Uncertainty Display</div>
+    <p style="font-size:13px;color:var(--text-mid);margin-bottom:12px;line-height:1.6">The system explicitly shows when it has low confidence. These are <span class="highlight-amber">not failure states</span> — they are honest outputs. A "Low" with full explanation is more valuable than a confident-looking number with no reasoning.</p>
+    <div class="expand-section">
+      <div class="expand-header" onclick="toggleExpand(this)">
+        <div class="expand-header-left">
+          <span style="font-size:15px">⚠️</span>
+          <span class="expand-title">Missing Data Handling</span>
+        </div>
+        <span class="expand-icon">▶ expand</span>
+      </div>
+      <div class="expand-content">When satellite data is unavailable (cloud cover, sensor delay), the system does not substitute estimated values. Instead, it marks the signal as "Unavailable" and adjusts the classification to reflect increased uncertainty. A corridor cannot be classified as High if a primary signal is missing.</div>
+    </div>
+    <div class="expand-section">
+      <div class="expand-header" onclick="toggleExpand(this)">
+        <div class="expand-header-left">
+          <span style="font-size:15px">🔄</span>
+          <span class="expand-title">Conflicting Signal Resolution</span>
+        </div>
+        <span class="expand-icon">▶ expand</span>
+      </div>
+      <div class="expand-content">When signals conflict (e.g., NDVI indicates pressure to move, but community report says no movement observed), the system does not average them into a misleading middle value. It surfaces the conflict explicitly: "Satellite signals suggest movement pressure, but community reports have not confirmed movement initiation." The user sees the disagreement, not a false consensus.</div>
+    </div>
+    <div class="expand-section">
+      <div class="expand-header" onclick="toggleExpand(this)">
+        <div class="expand-header-left">
+          <span style="font-size:15px">📅</span>
+          <span class="expand-title">Temporal Validity</span>
+        </div>
+        <span class="expand-icon">▶ expand</span>
+      </div>
+      <div class="expand-content">Every classification displays the timestamp of its most recent signal input. A corridor classified as High based on two-week-old data is clearly labeled as stale. Classifications degrade automatically as their input data ages, preventing outdated forecasts from appearing current.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Future ML Integration Plan</div>
+    <p style="font-size:13px;color:var(--text-mid);margin-bottom:12px;line-height:1.6">The current system uses <span class="highlight-amber">rule-based environmental scoring</span>. This is intentional — it is transparent, auditable, and does not require historical training data that may not yet exist for this region.</p>
+    <div style="background:var(--navy-3);border-radius:var(--radius-sm);padding:14px;border:1px solid rgba(79,148,240,0.2)">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#4f94f0;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px">Future Machine Learning Expansion</div>
+      <p style="font-size:13px;color:var(--text-mid);line-height:1.6">Once sufficient historical movement data is accumulated, a machine learning model (e.g., gradient-boosted trees or LSTM for temporal patterns) can be trained to refine the rule-based classifications. The ML model would be used to <em>improve</em> the existing logic, not replace it — the rule engine remains as a fallback and sanity check. All ML classifications would still be required to surface the top contributing features (SHAP values), preserving explainability.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== COMMUNITY REPORTS ===== -->
+<div id="page-community" class="page">
+  <div class="page-header">
+    <h1>Community Reports</h1>
+    <p>Field reports from pastoralists, monitors, and NGO workers. This is the ground-truth layer that confirms or contradicts satellite signals.</p>
+  </div>
+
+  <div class="concept-box">
+    <h3>Why Community Reports Are Central to This System</h3>
+    <p>Satellites observe the environment. Humans observe the animals. No satellite can see whether a borehole is broken, whether a tribal conflict is blocking a traditional route, or whether movement has already started. Community reporters fill these critical gaps. Crucially, when a community report <span class="highlight-amber">confirms what satellites predict</span>, the classification moves up. When it contradicts, we surface the conflict rather than hide it.</p>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">Report Submission <span class="api-hook">API: POST /community/reports</span></div>
+      <div class="data-placeholder" style="min-height:160px">
+        <div class="dp-icon">📱</div>
+        <div class="dp-label">Report collection interface</div>
+        <div class="dp-note">Backend required for report submission, storage, and retrieval. Reports can be collected via SMS, mobile app, or web form.</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Report Verification <span class="api-hook">API: GET /community/reports?verified=true</span></div>
+      <div class="data-placeholder" style="min-height:160px">
+        <div class="dp-icon">✅</div>
+        <div class="dp-label">Verification workflow</div>
+        <div class="dp-note">Submitted reports enter a verification queue. Verified reports carry higher signal weight in corridor classifications. Unverified reports are shown but flagged.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">How Reports Influence Classifications</div>
+    <div class="decision-row" style="grid-template-columns:1fr 1fr 1fr">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-dim);margin-bottom:3px">SCENARIO</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-dim)">EFFECT</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-dim)">WHY</div>
+    </div>
+    <div class="decision-row" style="grid-template-columns:1fr 1fr 1fr">
+      <div class="decision-condition">Satellite signals High + community confirms movement</div>
+      <div><span class="class-badge class-high" style="font-size:11px"><span class="class-dot"></span>High — reinforced</span></div>
+      <div class="decision-result">Two independent sources agree. Highest possible confidence.</div>
+    </div>
+    <div class="decision-row" style="grid-template-columns:1fr 1fr 1fr">
+      <div class="decision-condition">Satellite signals Moderate + community confirms movement</div>
+      <div><span class="class-badge class-high" style="font-size:11px"><span class="class-dot"></span>Upgraded to High</span></div>
+      <div class="decision-result">Community observation resolves satellite ambiguity.</div>
+    </div>
+    <div class="decision-row" style="grid-template-columns:1fr 1fr 1fr">
+      <div class="decision-condition">Satellite signals High + community reports NO movement</div>
+      <div><span class="class-badge class-moderate" style="font-size:11px"><span class="class-dot"></span>Downgraded to Moderate</span></div>
+      <div class="decision-result">Conflict surfaced. Environmental pressure exists but observed behavior differs. Monitor closely.</div>
+    </div>
+    <div class="decision-row" style="grid-template-columns:1fr 1fr 1fr">
+      <div class="decision-condition">No satellite data + community confirms movement</div>
+      <div><span class="class-badge class-moderate" style="font-size:11px"><span class="class-dot"></span>Moderate (data-limited)</span></div>
+      <div class="decision-result">Community observation alone is informative but not sufficient for High without satellite corroboration.</div>
+    </div>
+    <div class="decision-row" style="grid-template-columns:1fr 1fr 1fr">
+      <div class="decision-condition">No reports of any kind</div>
+      <div><span class="class-badge class-low" style="font-size:11px"><span class="class-dot"></span>Low or Unknown</span></div>
+      <div class="decision-result">Insufficient data to classify. System reports "No data" rather than inventing a classification.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== AI ASSISTANT ===== -->
+<div id="page-assistant" class="page">
+  <div class="assistant-header">
+    <div class="assistant-icon">🤖</div>
+    <div class="assistant-meta">
+      <h2>Explainability Assistant</h2>
+      <p>Ask anything about this system — methodology, technical design, classification logic, limitations, or backend integration.</p>
+    </div>
+    <span class="assistant-badge">Frontend Prototype</span>
+  </div>
+  <div class="chat-messages" id="chat-msgs">
+    <div class="msg bot">
+      <div class="msg-icon bot">🤖</div>
+      <div>
+        <div class="msg-bubble bot">Hello. I'm the Explainability Assistant for the Satellite-Driven Cattle Movement Forecasting System.<br><br>I can answer questions about <strong>how the system works</strong>, <strong>why classifications are High/Moderate/Low</strong>, the <strong>technical pipeline</strong>, <strong>satellite data sources</strong>, <strong>community reporting</strong>, <strong>backend integration requirements</strong>, and the <strong>limitations</strong> of this approach.<br><br>Ask me anything — I'm not limited to the suggested questions below.</div>
+        <div class="msg-time" id="init-time"></div>
+      </div>
+    </div>
+  </div>
+  <div class="chat-suggestions" id="chat-sugg">
+    <span style="font-size:11px;color:var(--text-dim);font-family:'JetBrains Mono',monospace;align-self:center">SUGGESTED:</span>
+    <span class="sugg-chip" onclick="useSugg(this)">Why not use percentages?</span>
+    <span class="sugg-chip" onclick="useSugg(this)">How does the classification logic work?</span>
+    <span class="sugg-chip" onclick="useSugg(this)">What satellite data is used?</span>
+    <span class="sugg-chip" onclick="useSugg(this)">What backend does this need?</span>
+    <span class="sugg-chip" onclick="useSugg(this)">How do community reports affect forecasts?</span>
+    <span class="sugg-chip" onclick="useSugg(this)">What are the system's limitations?</span>
+    <span class="sugg-chip" onclick="useSugg(this)">Could this use machine learning?</span>
+    <span class="sugg-chip" onclick="useSugg(this)">Why track environment instead of animals?</span>
+  </div>
+  <div class="chat-input-area">
+    <input class="chat-input" id="chat-in" placeholder="Ask any question about this system..." onkeydown="if(event.key==='Enter')sendMsg()" />
+    <button class="chat-send" onclick="sendMsg()">Send →</button>
+  </div>
+</div>
+
+<!-- ===== TECHNICAL PIPELINE ===== -->
+<div id="page-pipeline" class="page">
+  <div class="page-header">
+    <h1>Technical Pipeline</h1>
+    <p>The full architecture required to make this system operational — from satellite ingestion to corridor visualization.</p>
+  </div>
+
+  <div style="background:var(--navy-3);border:1px solid rgba(79,148,240,0.2);border-radius:var(--radius);padding:14px 16px;margin-bottom:4px">
+    <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#4f94f0;margin-bottom:4px">CURRENT STATE</div>
+    <div style="font-size:13px;color:var(--text-mid)">This prototype implements the <strong style="color:var(--text-bright)">frontend layer only</strong>. The pipeline below describes what a fully operational version requires. Each layer is a distinct backend component with defined interfaces.</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Layer 1 — Data Ingestion</div>
+    <div class="pipeline-step">
+      <div class="step-num" style="background:rgba(47,191,173,0.1);border-color:rgba(47,191,173,0.3);color:var(--teal)">1A</div>
+      <div class="step-body">
+        <h4>Satellite Data Ingestion</h4>
+        <p>Scheduled fetching from satellite APIs (USGS Earth Explorer, NASA Earthdata, Copernicus). Raw satellite scenes are ingested, cloud-masked, and converted to analysis-ready data products (NDVI, water body extent, soil moisture, precipitation anomaly). Processing via rasterio / GDAL pipeline.</p>
+        <span class="step-tag tag-satellite">Python · GDAL · rasterio · xarray</span>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="step-num" style="background:rgba(47,191,173,0.1);border-color:rgba(47,191,173,0.3);color:var(--teal)">1B</div>
+      <div class="step-body">
+        <h4>Community Report Ingestion</h4>
+        <p>Field reports submitted via SMS gateway (Africa's Talking / Twilio), mobile app (KoboToolbox / ODK), or web form. Reports are parsed, geolocated, timestamped, and stored in a structured database. A moderation queue handles verification before reports influence classifications.</p>
+        <span class="step-tag tag-community">FastAPI · PostgreSQL · Twilio SMS · KoboToolbox</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Layer 2 — Spatial Processing</div>
+    <div class="pipeline-step">
+      <div class="step-num" style="background:var(--amber-dim);border-color:rgba(232,168,56,0.3);color:var(--amber)">2A</div>
+      <div class="step-body">
+        <h4>GIS Processing & Accessibility Modeling</h4>
+        <p>Satellite data layers are reprojected to a common coordinate reference system and spatial resolution. A terrain accessibility surface is computed from DEM data, slope analysis, and flood masks. The result is a movement feasibility raster — indicating which areas and routes are physically traversable.</p>
+        <span class="step-tag tag-logic">PostGIS · QGIS Server · Least-cost Path Analysis · DEM</span>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="step-num" style="background:var(--amber-dim);border-color:rgba(232,168,56,0.3);color:var(--amber)">2B</div>
+      <div class="step-body">
+        <h4>Signal Extraction & Normalization</h4>
+        <p>For each candidate corridor zone, signal values are extracted and normalized to a common scale. NDVI anomaly, precipitation deficit, water body change, and slope gradient are each converted into a dimensionless signal strength value (Strong / Moderate / Weak / Unavailable) using defined thresholds from pastoral ecology literature.</p>
+        <span class="step-tag tag-logic">NumPy · SciPy · Calibrated thresholds from literature</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Layer 3 — Decision Engine</div>
+    <div class="pipeline-step">
+      <div class="step-num" style="background:rgba(232,168,56,0.1);border-color:rgba(232,168,56,0.3);color:var(--amber)">3</div>
+      <div class="step-body">
+        <h4>Rule-Based Environmental Scoring</h4>
+        <p>The classification engine applies the signal weighting logic to generate a High / Moderate / Low forecast for each corridor. The engine records which signals were available, their strengths, and the exact decision path — producing a full audit trail for every classification. No black boxes: every output is traceable to specific inputs.</p>
+        <span class="step-tag tag-logic">Python decision trees · Fully auditable · No ML required (v1)</span>
+        <span class="step-tag tag-future" style="margin-left:6px">Future: XGBoost · LSTM · SHAP explainability</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Layer 4 — Forecast Output</div>
+    <div class="pipeline-step">
+      <div class="step-num" style="background:rgba(79,148,240,0.1);border-color:rgba(79,148,240,0.3);color:#4f94f0">4A</div>
+      <div class="step-body">
+        <h4>Corridor Visualization API</h4>
+        <p>Computed corridor classifications are served via a REST API as GeoJSON. The frontend consumes this API to render corridor overlays on the Leaflet.js map. Each GeoJSON feature includes classification, signal breakdown, and the decision audit trail as metadata.</p>
+        <span class="step-tag tag-future">FastAPI · GeoJSON · Leaflet.js / Mapbox GL</span>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="step-num" style="background:rgba(79,148,240,0.1);border-color:rgba(79,148,240,0.3);color:#4f94f0">4B</div>
+      <div class="step-body">
+        <h4>Alert & Notification System</h4>
+        <p>High-classification corridors approaching risk zones trigger alerts to humanitarian coordinators. Alerts are sent via email, SMS, or integration with existing humanitarian coordination platforms (HDX, ReliefWeb API).</p>
+        <span class="step-tag tag-future">Celery + Redis · Email / SMS · HDX integration</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title" style="color:#4f94f0">Future: Machine Learning Expansion</div>
+    <p style="font-size:13px;color:var(--text-mid);line-height:1.65;margin-bottom:12px">The current rule-based engine is the correct starting point. Once 12–24 months of validated movement data has been collected against ground truth, a supervised ML model can be trained to improve classification accuracy — particularly in edge cases where signals conflict.</p>
+    <div style="background:rgba(79,148,240,0.08);border:1px solid rgba(79,148,240,0.2);border-radius:var(--radius-sm);padding:14px">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#4f94f0;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.04em">Planned ML Architecture</div>
+      <ul class="rule-list">
+        <li>Input features: same signals used by rule engine + temporal lags + historical corridor usage frequency</li>
+        <li>Model type: Gradient-boosted tree (XGBoost) for tabular signals; LSTM for temporal sequence data</li>
+        <li>Explainability: SHAP values required on every prediction — no unexplained outputs</li>
+        <li>Validation: Holdout against confirmed movement reports; human review of disagreements</li>
+        <li>Deployment: ML model runs alongside rule engine; disagreements are surfaced to analysts</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+</main>
+</div>
+
+<script>
+// ============================
+//  NAVIGATION
+// ============================
+document.querySelectorAll('.nav-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('page-' + btn.dataset.page).classList.add('active');
+  });
+});
+
+// ============================
+//  EXPAND / COLLAPSE
+// ============================
+function toggleExpand(header) {
+  const content = header.nextElementSibling;
+  const icon = header.querySelector('.expand-icon');
+  const isOpen = content.classList.contains('open');
+  content.classList.toggle('open', !isOpen);
+  icon.textContent = isOpen ? '▶ expand' : '▼ collapse';
+}
+
+function toggleWhy(btn) {
+  const detail = btn.nextElementSibling;
+  const isOpen = detail.classList.contains('open');
+  detail.classList.toggle('open', !isOpen);
+  btn.textContent = isOpen
+    ? '▶ WHY IS THIS "' + (btn.closest('.corridor-card').querySelector('.class-badge').textContent.trim().split(' ')[0].toUpperCase()) + '"? — click to expand'
+    : '▼ Hide explanation';
+}
+
+// ============================
+//  MAP LAYER TOGGLES
+// ============================
+function toggleLayer(btn, id) {
+  btn.classList.toggle('active');
+  const overlay = document.getElementById('overlay-' + id);
+  overlay.classList.toggle('visible', btn.classList.contains('active'));
+}
+
+// ============================
+//  TIMESTAMPS
+// ============================
+document.getElementById('init-time').textContent = new Date().toLocaleTimeString();
+
+// ============================
+//  AI ASSISTANT
+// ============================
+const KB = {
+  "why not use percentages": `Great question — and one that gets at the core design philosophy of this system.\n\nUsing a percentage like "89% likelihood" implies a false precision. To claim 89% rather than 88% or 91%, you would need a statistically validated probability model trained on a large historical dataset, with known error bounds. We don't have that yet — and pretending we do misleads users.\n\nA classification like "High" is more honest. It communicates: "multiple independent environmental signals agree that movement is likely here." It doesn't falsely imply that we've quantified the uncertainty to one decimal place.\n\nThis approach also forces every classification to be explained — you can't just report "High" without also showing which signals drove that classification and why they agree. The explanation IS the evidence.`,
+
+  "how does the classification logic work": `The classification engine works in three stages:\n\n1. SIGNAL EXTRACTION: For each candidate corridor zone, we extract NDVI anomaly, water accessibility, precipitation trend, terrain feasibility, and community reports.\n\n2. SIGNAL STRENGTH SCORING: Each signal is rated Strong / Moderate / Weak / Unavailable based on calibrated thresholds from pastoral ecology research.\n\n3. CLASSIFICATION DECISION:\n• 3+ strong signals (especially vegetation + water + community) → High\n• Mixed signals or missing community confirmation → Moderate\n• Weak or conflicting signals → Low\n• Missing critical data → Unknown (never falsely classified)\n\nEvery classification outputs an audit trail — which signals were used, their strengths, and the exact decision path. Nothing is a black box.`,
+
+  "what satellite data is used": `The system uses four primary satellite data products:\n\n🌿 VEGETATION: NDVI derived from MODIS or Sentinel-2. NDVI below a threshold (typically 0.2–0.3 for rangeland) indicates severe vegetation stress — the strongest single predictor of outbound movement.\n\n💧 WATER: Surface water extent from Sentinel-1 SAR (penetrates cloud cover). Monitors rivers, lakes, boreholes, and seasonal wetlands.\n\n🌧️ PRECIPITATION: CHIRPS (Climate Hazards Group InfraRed Precipitation with Station data). Drought indices derived from precipitation anomaly.\n\n⛰️ TERRAIN: SRTM 30m DEM for slope analysis and accessibility modeling.\n\nAll data is available free through NASA Earthdata, USGS Earth Explorer, and Copernicus Open Access Hub.`,
+
+  "what backend does this need": `A fully operational version requires:\n\n1. DATA INGESTION SERVICE: Scheduled Python jobs fetching and processing satellite data via GDAL/rasterio. Runs on a cloud VM (AWS/GCP/Azure).\n\n2. SPATIAL DATABASE: PostGIS-enabled PostgreSQL storing processed rasters, vector layers, community reports, and corridor classifications.\n\n3. CLASSIFICATION API: FastAPI service that runs the scoring engine and serves results as GeoJSON via REST endpoints.\n\n4. TILE SERVER: Serves processed satellite layers as map tiles (GeoServer or titiler) for the Leaflet.js map frontend.\n\n5. COMMUNITY REPORTING BACKEND: Handles SMS/mobile report submission (Twilio or Africa's Talking), storage, and moderation workflow.\n\n6. NOTIFICATION SERVICE: Celery + Redis for async alert delivery when High corridors approach risk zones.\n\nThis frontend prototype is API-ready — every data display point has a defined endpoint it will consume once the backend is connected.`,
+
+  "how do community reports affect forecasts": `Community reports are the highest-weight signal in the system. Here's exactly how they affect classifications:\n\n✅ Satellite says High + community confirms: Classification is reinforced. Two independent sources agree — highest possible confidence.\n\n⬆️ Satellite says Moderate + community confirms: Classification upgrades to High. Human observation resolves satellite ambiguity.\n\n⬇️ Satellite says High + community says no movement: Classification downgrades to Moderate and the conflict is surfaced explicitly to analysts. This is crucial — we don't hide disagreements.\n\n📊 Only community data, no satellite: Moderate (data-limited). Observable but not corroborated.\n\n❌ No data of any kind: We report "Unknown" — never a fabricated classification.\n\nThe reason community reports carry such high weight is simple: they are direct observation. A field monitor reporting that a herd is moving is more reliable than an indirect inference from a satellite signal.`,
+
+  "what are the system's limitations": `Transparency requires acknowledging limitations directly:\n\n1. DATA GAPS: Cloud cover can block satellite observation for days or weeks. During gaps, classifications degrade to Moderate or Unknown rather than using stale data.\n\n2. NO TIMING PREDICTIONS: The system predicts WHERE movement is likely, not exactly WHEN. Temporal precision requires GPS-tracked historical data we don't yet have.\n\n3. COMMUNITY REPORTING COVERAGE: The system is strongest where reporting networks are dense. In areas with no reporters, satellite-only signals are less reliable.\n\n4. THRESHOLD CALIBRATION: The signal strength thresholds (what NDVI value = "strong signal") are currently based on published pastoral ecology research. They need calibration against ground-truth data from the specific region.\n\n5. INDIVIDUAL HERD VARIATION: Some herds may respond differently to environmental signals based on local custom, herd size, or social factors satellites can't observe.\n\n6. NOT A TRACKING SYSTEM: The system models decision conditions, not movements. A corridor classification of High means conditions strongly motivate movement — it doesn't mean movement has necessarily occurred.`,
+
+  "could this use machine learning": `Yes — and that's explicitly in the roadmap. But here's why rule-based logic comes first:\n\n1. EXPLAINABILITY: Rule-based systems are fully transparent. A humanitarian organization can audit exactly why a corridor was classified High. ML models — especially neural networks — can't currently provide this without additional tooling (SHAP values, LIME, etc.).\n\n2. NO HISTORICAL DATA YET: Supervised ML requires labeled training examples of confirmed movements. We're building that dataset now through community reports and field validation. In 12–24 months, enough data should exist to train a useful model.\n\n3. RULE ENGINE AS BASELINE: The rule-based engine also serves as a sanity check for future ML models. If the ML model disagrees strongly with the rule engine, that disagreement is surfaced for human review.\n\nPlanned ML approach: XGBoost for tabular signal data (fast, interpretable with SHAP), LSTM for temporal sequence analysis of signal trends. Both would still be required to output feature importance on every prediction — no unexplained classifications.`,
+
+  "why track environment instead of animals": `This is the central design insight, and it's worth explaining carefully.\n\nTracking animals directly (via GPS collars) has several problems:\n• Expensive at scale — collars cost hundreds of dollars each\n• Requires physical access to animals (difficult for free-roaming pastoral herds)\n• Creates privacy concerns for pastoralist communities who may not want their livestock movements surveilled\n• Still only tells you where animals are, not where they're going next\n\nEnvironmental modeling solves all of these:\n• Satellites observe entire regions simultaneously for free\n• No physical access to animals required\n• Privacy-preserving — we model the environment, not individuals\n• Predictive — we forecast WHERE movement is likely BEFORE it happens, not just track where animals already went\n\nThe key insight from pastoral ecology is that herds are rational decision-makers following environmental incentives. If you understand the environment, you understand the decision. This is validated by decades of research: NDVI decline and water scarcity reliably precede movement in pastoral systems worldwide.`,
+
+  "how accurate is this system": `Honesty first: we don't yet have validated accuracy statistics for this specific implementation, because it's a prototype without historical data to test against.\n\nWhat we can say from existing research:\n\nStudies of environmental models for pastoral movement prediction in East and West Africa show that NDVI + precipitation + water availability signals can explain 60–80% of observed movement variance in well-monitored regions.\n\nAdding community reports significantly improves this — field validation studies show that human confirmation of satellite signals increases forecast accuracy substantially.\n\nThe honest position is: this system will have calibrated accuracy statistics once it has been run against ground-truth data for one full pastoral cycle. Until then, we report classifications as environmental evidence-based assessments, not precision forecasts. This is why we use High / Moderate / Low rather than percentages.`,
+
+  "what is ndvi": `NDVI stands for Normalized Difference Vegetation Index. It's a satellite-derived measure of vegetation health ranging from -1 to +1, where values above ~0.3 indicate healthy vegetation and values below ~0.2 indicate stressed or sparse vegetation.\n\nIn pastoral movement forecasting, NDVI is critical because:\n\n• Herds need forage. When NDVI declines sharply in an area, the area can no longer support the herd.\n• NDVI change rate matters more than absolute value. A rapid 40% decline in 3 weeks is a stronger signal than a permanently low value in an arid zone where herds are adapted.\n• NDVI is available free from MODIS (250m resolution, every 16 days) and Sentinel-2 (10m resolution, every 5 days).\n\nIn this system, NDVI anomaly (current NDVI vs. historical average for that date) is used as the vegetation signal, rather than raw NDVI — this accounts for seasonal variation and identifies genuinely abnormal conditions.`,
+
+  "is this open source": `The prototype is designed to be open-source ready. The technical stack uses entirely open-source components: Python, GDAL, rasterio, FastAPI, PostGIS, Leaflet.js.\n\nSatellite data sources (MODIS, Sentinel, SRTM) are all free and openly available.\n\nMaking this open source aligns with the humanitarian mission — other organizations should be able to deploy similar systems in different regions without licensing costs. We would recommend open-sourcing under MIT or Apache 2.0 license once the system is operational.`,
+
+  "default": (q) => `Good question. Let me address "${q}" directly.\n\nThis system is a frontend prototype for a satellite-driven environmental forecasting approach. The core methodology: satellite data detects environmental conditions (vegetation stress, water scarcity, terrain) → rule-based scoring classifies movement likelihood → classifications are shown as High / Moderate / Low with full explanations of which signals drove the result.\n\nIf your question touches on a specific aspect — technical architecture, classification logic, satellite data, community reporting, machine learning plans, or limitations — I can go deep on any of those. What would you like me to elaborate on?`
+};
+
+function getBotReply(msg) {
+  const lower = msg.toLowerCase();
+  for (const [key, val] of Object.entries(KB)) {
+    if (key === 'default') continue;
+    const keywords = key.split(' ');
+    if (keywords.every(k => lower.includes(k)) || lower.includes(key)) {
+      return typeof val === 'function' ? val(msg) : val;
+    }
+  }
+  // Partial match
+  for (const [key, val] of Object.entries(KB)) {
+    if (key === 'default') continue;
+    if (key.split(' ').filter(k => lower.includes(k)).length >= 2) {
+      return typeof val === 'function' ? val(msg) : val;
+    }
+  }
+  // Topic detection
+  if (lower.match(/accurac|reliable|precision|how good/)) return KB["how accurate is this system"];
+  if (lower.match(/ndvi|vegetation|forage|grass/)) return KB["what is ndvi"];
+  if (lower.match(/satellite|remote sens/)) return KB["what satellite data is used"];
+  if (lower.match(/ml|machine learn|ai|model|train/)) return KB["could this use machine learning"];
+  if (lower.match(/percent|number|statistic|quantit/)) return KB["why not use percentages"];
+  if (lower.match(/backend|server|database|api|technic|architect|stack/)) return KB["what backend does this need"];
+  if (lower.match(/limit|weakness|fail|problem|challenge|gap/)) return KB["what are the system's limitations"];
+  if (lower.match(/community|report|field|sms|monitor/)) return KB["how do community reports affect forecasts"];
+  if (lower.match(/environment|animal|track|gps|surveil/)) return KB["why track environment instead of animals"];
+  if (lower.match(/classif|high|moderate|low|tier|level|logic|scoring/)) return KB["how does the classification logic work"];
+  if (lower.match(/open source|licens|free/)) return KB["is this open source"];
+  return KB.default(msg);
+}
+
+function addMsg(role, text) {
+  const el = document.getElementById('chat-msgs');
+  const div = document.createElement('div');
+  div.className = `msg ${role}`;
+  const time = new Date().toLocaleTimeString();
+  const isBot = role === 'bot';
+  const icon = isBot ? '🤖' : '👤';
+  div.innerHTML = isBot
+    ? `<div class="msg-icon bot">${icon}</div><div><div class="msg-bubble bot">${text.replace(/\n/g,'<br>').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/__(.*?)__/g,'<em>$1</em>')}</div><div class="msg-time">${time}</div></div>`
+    : `<div><div class="msg-bubble user">${text}</div><div class="msg-time" style="text-align:right">${time}</div></div><div class="msg-icon user">${icon}</div>`;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+  document.getElementById('chat-sugg').style.display = 'none';
+}
+
+function addTyping() {
+  const el = document.getElementById('chat-msgs');
+  const div = document.createElement('div');
+  div.className = 'msg bot'; div.id = 'typing';
+  div.innerHTML = `<div class="msg-icon bot">🤖</div><div><div class="msg-bubble bot"><div class="typing-dots"><span></span><span></span><span></span></div></div></div>`;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+}
+
+function sendMsg() {
+  const input = document.getElementById('chat-in');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  addMsg('user', text);
+  addTyping();
+  setTimeout(() => {
+    document.getElementById('typing')?.remove();
+    addMsg('bot', getBotReply(text));
+  }, 500 + Math.random() * 700);
+}
+
+function useSugg(chip) {
+  document.getElementById('chat-in').value = chip.textContent;
+  sendMsg();
+}
+</script>
+</body>
+</html>
