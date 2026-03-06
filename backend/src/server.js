@@ -26,8 +26,12 @@ const apiRouter = createApiRouter({ pipelineService, googleEarthService, config 
 app.use("/api", apiRouter);
 app.use(apiRouter);
 
+app.get("/", (_req, res) => {
+  res.redirect("/prototype");
+});
+
 app.get("/prototype", (_req, res) => {
-  res.sendFile(path.resolve(workspaceRoot, "cattle-forecasting-prototype (1).html"));
+  res.sendFile(path.resolve(workspaceRoot, "cattle-forecasting-prototype.html"));
 });
 
 app.use(express.static(workspaceRoot));
@@ -65,6 +69,17 @@ async function start() {
     console.log(`Backend listening on http://localhost:${config.port}`);
     // eslint-disable-next-line no-console
     console.log(`Google Earth key configured: ${Boolean(config.googleEarthApiKey)}`);
+    googleEarthService
+      .resolveRuntimeMode()
+      .then((runtime) => {
+        // eslint-disable-next-line no-console
+        console.log(
+          `Active provider: ${runtime.activeProvider.providerName} (${runtime.activeProvider.status}) | fallback=${runtime.useFallback}`
+        );
+      })
+      .catch(() => {
+        // no-op: startup already succeeded
+      });
   });
 }
 

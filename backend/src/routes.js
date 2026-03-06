@@ -112,18 +112,50 @@ export function createApiRouter({ pipelineService, googleEarthService, config })
 
   router.get("/health", async (_req, res) => {
     const state = await pipelineService.getStateSnapshot();
+    const providerRuntime = await googleEarthService.resolveRuntimeMode();
+    const earthStatus = providerRuntime.connectivity;
     res.json({
       status: "ok",
       timestamp: new Date().toISOString(),
       dataSourcesRegistered: state.dataSources.status === "registered",
       masterGridReady: Boolean(state.masterGrid),
-      latestRunDate: state.dailyRuns[0]?.date || null
+      latestRunDate: state.dailyRuns[0]?.date || null,
+      earthEngine: {
+        status: earthStatus.status,
+        runtimeMode: earthStatus.runtimeMode,
+        isLive: earthStatus.isLive,
+        fallbackActive: earthStatus.fallbackActive,
+        liveEarthCallsEnabled: earthStatus.liveEarthCallsEnabled,
+        message: earthStatus.message || null,
+        checkedAt: earthStatus.checkedAt
+      },
+      providers: {
+        activeProvider: providerRuntime.activeProvider,
+        useFallback: providerRuntime.useFallback,
+        liveProviderCount: providerRuntime.liveProviderCount,
+        providerCount: providerRuntime.providerCount
+      }
     });
   });
 
-  router.get("/providers/google-earth/status", async (_req, res) => {
-    const status = await googleEarthService.checkConnectivity();
+  router.get("/providers/google-earth/status", async (req, res) => {
+    const force = parseBoolean(req.query.force) ?? false;
+    const status = await googleEarthService.checkConnectivity({ force });
     res.json(status);
+  });
+
+  router.get("/providers/status", async (req, res) => {
+    const force = parseBoolean(req.query.force) ?? false;
+    const runtime = await googleEarthService.resolveRuntimeMode({ force });
+    res.json({
+      checkedAt: new Date().toISOString(),
+      activeProvider: runtime.activeProvider,
+      useFallback: runtime.useFallback,
+      liveProviderCount: runtime.liveProviderCount,
+      providerCount: runtime.providerCount,
+      providers: runtime.providers,
+      mapSourceCatalog: googleEarthService.getMapSourceCatalog()
+    });
   });
 
   // STEP 1 - Data source registration
@@ -215,7 +247,7 @@ export function createApiRouter({ pipelineService, googleEarthService, config })
       const movement = await pipelineService.runMovementForecast({
         date: req.body?.date,
         horizons: Array.isArray(req.body?.horizons) ? req.body.horizons : [7, 14],
-        particleCount: toNumber(req.body?.particleCount, 320)
+        particleCount: toNumber(req.body?.particleCount, 920)
       });
       await audit(req, "forecast.run", { date: req.body?.date, horizons: req.body?.horizons || [7, 14] });
       res.json(movement);

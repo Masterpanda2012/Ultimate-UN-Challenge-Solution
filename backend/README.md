@@ -9,7 +9,7 @@ Backend implementation for the PFD pipeline with Google Earth key integration.
 - Produces daily feature vectors, GAM attractiveness scores, cost surfaces, and 7/14-day probabilistic corridors.
 - Ingests and trust-weights community reports.
 - Exposes validation metrics and UN-facing decision-support outputs.
-- Uses `GOOGLE_EARTH_API_KEY` for Earth Engine request construction and connectivity checks.
+- Verifies Google Earth connectivity at runtime and automatically falls back when key/live access is unavailable.
 - Adds operations features:
   - backtesting
   - alert engine
@@ -30,12 +30,14 @@ npm start
 ```
 
 Server defaults to `http://localhost:8080`.
+Frontend entrypoint is `http://localhost:8080/prototype`.
 
 ## Key endpoints
 
 - Health and provider:
   - `GET /health`
   - `GET /providers/google-earth/status`
+  - `GET /providers/status`
   - `GET /auth/me`
 - Step 1-2 setup:
   - `POST /setup/data-sources/register`
@@ -99,10 +101,20 @@ curl http://localhost:8080/corridors/active?horizonDays=7
 
 ## Notes on Google Earth key usage
 
-- Set `GOOGLE_EARTH_API_KEY` in `.env`.
+- `GOOGLE_EARTH_API_KEY` is optional.
 - `GET /providers/google-earth/status` reports whether key-based Earth Engine probes are configured/working.
+- `GET /providers/google-earth/status?force=true` bypasses cache and performs an immediate provider re-check.
+- `GET /providers/status` returns active provider selection across the multi-source chain.
 - `ENABLE_LIVE_EARTH_CALLS=true` enables outbound Earth Engine metadata probes.
-- If live calls are disabled/unavailable, the pipeline continues with deterministic fallback hints and still produces full outputs.
+- Provider priority chain is:
+  - Google Earth Engine
+  - Copernicus Data Space
+  - CHIRPS
+  - NOAA/NWS
+  - OpenStreetMap (status signal only)
+  - deterministic fallback
+- If none are live, backend automatically runs fallback mode and still produces full outputs.
+- `GET /map/layers` now includes `sources.activeProvider`, provider statuses, and free map source catalog metadata for frontend rendering.
 
 ## Auth and audit
 

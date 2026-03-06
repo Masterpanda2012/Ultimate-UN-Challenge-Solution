@@ -33,7 +33,8 @@ export const config = {
   pipelineIntervalHours: toNumber(process.env.PIPELINE_INTERVAL_HOURS, 24),
   defaultGridResolutionKm: toNumber(process.env.DEFAULT_GRID_RESOLUTION_KM, 5),
   defaultCountryCode: process.env.DEFAULT_COUNTRY_CODE || "UN-DEMO",
-  autoBootstrapOnStart: toBool(process.env.AUTO_BOOTSTRAP_ON_START, true)
+  autoBootstrapOnStart: toBool(process.env.AUTO_BOOTSTRAP_ON_START, true),
+  providerProbeTimeoutMs: toNumber(process.env.PROVIDER_PROBE_TIMEOUT_MS, 2800)
 };
 
 export function maskApiKey(apiKey) {

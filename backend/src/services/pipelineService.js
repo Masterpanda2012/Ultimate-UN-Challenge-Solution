@@ -111,6 +111,18 @@ const FEATURE_KEYS = [
   "conflictAvoidancePrior"
 ];
 
+const DEFAULT_OPERATIONAL_BOUNDS = Object.freeze({
+  minLat: 3,
+  maxLat: 12,
+  minLng: 24,
+  maxLng: 36
+});
+
+const MIN_OPERATIONAL_SPAN_DEG = 0.4;
+const MAX_OPERATIONAL_LAT_SPAN_DEG = 18;
+const MAX_OPERATIONAL_LNG_SPAN_DEG = 20;
+const MAX_PASTORAL_LATITUDE_ABS = 35;
+
 function clamp(value, min = 0, max = 1) {
   return Math.max(min, Math.min(max, value));
 }
@@ -245,6 +257,64 @@ function rollingWindowLatency(source) {
   return 48;
 }
 
+function isFiniteCoordinate(lat, lng) {
+  return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+}
+
+function sanitizeBounds(bounds = {}, fallback = DEFAULT_OPERATIONAL_BOUNDS) {
+  const rawMinLat = Number(bounds?.minLat);
+  const rawMaxLat = Number(bounds?.maxLat);
+  const rawMinLng = Number(bounds?.minLng);
+  const rawMaxLng = Number(bounds?.maxLng);
+
+  const minLat = Number.isFinite(rawMinLat) ? clamp(rawMinLat, -89.5, 89.5) : fallback.minLat;
+  const maxLat = Number.isFinite(rawMaxLat) ? clamp(rawMaxLat, -89.5, 89.5) : fallback.maxLat;
+  const minLng = Number.isFinite(rawMinLng) ? clamp(rawMinLng, -179.5, 179.5) : fallback.minLng;
+  const maxLng = Number.isFinite(rawMaxLng) ? clamp(rawMaxLng, -179.5, 179.5) : fallback.maxLng;
+
+  const orderedMinLat = Math.min(minLat, maxLat);
+  const orderedMaxLat = Math.max(minLat, maxLat);
+  const orderedMinLng = Math.min(minLng, maxLng);
+  const orderedMaxLng = Math.max(minLng, maxLng);
+
+  return {
+    minLat: orderedMinLat,
+    maxLat: orderedMaxLat,
+    minLng: orderedMinLng,
+    maxLng: orderedMaxLng
+  };
+}
+
+function isOperationalBounds(bounds = {}) {
+  const safe = sanitizeBounds(bounds);
+  const latSpan = safe.maxLat - safe.minLat;
+  const lngSpan = safe.maxLng - safe.minLng;
+  return (
+    latSpan >= MIN_OPERATIONAL_SPAN_DEG &&
+    lngSpan >= MIN_OPERATIONAL_SPAN_DEG &&
+    latSpan <= MAX_OPERATIONAL_LAT_SPAN_DEG &&
+    lngSpan <= MAX_OPERATIONAL_LNG_SPAN_DEG &&
+    Math.max(Math.abs(safe.minLat), Math.abs(safe.maxLat)) <= MAX_PASTORAL_LATITUDE_ABS
+  );
+}
+
+function pointInsideBounds(lat, lng, bounds, padDeg = 0) {
+  if (!isFiniteCoordinate(lat, lng)) return false;
+  const safe = sanitizeBounds(bounds);
+  return (
+    lat >= safe.minLat - padDeg &&
+    lat <= safe.maxLat + padDeg &&
+    lng >= safe.minLng - padDeg &&
+    lng <= safe.maxLng + padDeg
+  );
+}
+
+function isOperationalCoordinate(lat, lng, bounds = DEFAULT_OPERATIONAL_BOUNDS) {
+  if (!isFiniteCoordinate(lat, lng)) return false;
+  if (Math.abs(lat) > MAX_PASTORAL_LATITUDE_ABS) return false;
+  return pointInsideBounds(lat, lng, bounds, 1.2);
+}
+
 function getOrCreateRun(state, date) {
   let run = state.dailyRuns.find((item) => item.date === date);
   if (!run) {
@@ -338,6 +408,43 @@ export class PipelineService {
     this.store = store;
     this.googleEarthService = googleEarthService;
     this.config = config;
+  }
+
+  activeOperationalBounds(masterGrid = null) {
+    const candidate = sanitizeBounds(masterGrid?.bounds || DEFAULT_OPERATIONAL_BOUNDS);
+    return isOperationalBounds(candidate) ? candidate : DEFAULT_OPERATIONAL_BOUNDS;
+  }
+
+  isMasterGridHealthy(masterGrid = null) {
+    if (!masterGrid || !Array.isArray(masterGrid.cells) || !masterGrid.cells.length) return false;
+    const bounds = sanitizeBounds(masterGrid.bounds || DEFAULT_OPERATIONAL_BOUNDS);
+    if (!isOperationalBounds(bounds)) return false;
+
+    let validPoints = 0;
+    let operationalPoints = 0;
+    for (const cell of masterGrid.cells) {
+      const lat = Number(cell?.centroid?.lat);
+      const lng = Number(cell?.centroid?.lng);
+      if (!isFiniteCoordinate(lat, lng)) continue;
+      validPoints += 1;
+      if (isOperationalCoordinate(lat, lng, bounds)) operationalPoints += 1;
+    }
+
+    if (!validPoints) return false;
+    const validRatio = validPoints / Math.max(1, masterGrid.cells.length);
+    const operationalRatio = operationalPoints / validPoints;
+    return validRatio >= 0.97 && operationalRatio >= 0.9;
+  }
+
+  runGridAlignmentRatio(run, gridCellIds, horizonDays = 7) {
+    if (!run || !(gridCellIds instanceof Set) || !gridCellIds.size) return 0;
+    const heatmap = run.movement?.simulations?.[horizonDays]?.probabilityHeatmap || [];
+    if (!heatmap.length) return 0;
+    let hits = 0;
+    for (const item of heatmap) {
+      if (gridCellIds.has(item?.cellId)) hits += 1;
+    }
+    return hits / heatmap.length;
   }
 
   summarizeDataQuality(run) {
@@ -451,7 +558,8 @@ export class PipelineService {
   }
 
   async registerDataSources({ force = false } = {}) {
-    const earthStatus = await this.googleEarthService.checkConnectivity();
+    const providerRuntime = await this.googleEarthService.resolveRuntimeMode();
+    const earthStatus = providerRuntime.connectivity;
 
     const state = await this.store.transact((draft) => {
       if (draft.dataSources.status === "registered" && !force) {
@@ -464,7 +572,13 @@ export class PipelineService {
       draft.dataSources.status = "registered";
       draft.dataSources.registrationLog.push({
         at: new Date().toISOString(),
-        earthStatus
+        earthStatus,
+        providerRuntime: {
+          activeProvider: providerRuntime.activeProvider,
+          liveProviderCount: providerRuntime.liveProviderCount,
+          providerCount: providerRuntime.providerCount,
+          useFallback: providerRuntime.useFallback
+        }
       });
 
       return draft;
@@ -473,6 +587,7 @@ export class PipelineService {
     return {
       status: state.dataSources.status,
       earthStatus,
+      providerRuntime,
       nrtDrivers: state.dataSources.nrtDrivers,
       correctionLayers: state.dataSources.correctionLayers,
       baseLayers: state.dataSources.baseLayers
@@ -483,29 +598,30 @@ export class PipelineService {
     countryCode = this.config.defaultCountryCode,
     resolutionKm = this.config.defaultGridResolutionKm,
     maxCells = 800,
-    bounds = {
-      minLat: 3,
-      maxLat: 12,
-      minLng: 24,
-      maxLng: 36
-    }
+    bounds = DEFAULT_OPERATIONAL_BOUNDS
   } = {}) {
+    const safeBounds = sanitizeBounds(bounds, DEFAULT_OPERATIONAL_BOUNDS);
+    const bounded = isOperationalBounds(safeBounds) ? safeBounds : DEFAULT_OPERATIONAL_BOUNDS;
+    const safeCountryCode = String(countryCode || this.config.defaultCountryCode || "UN-DEMO").trim() || "UN-DEMO";
     const clippedResolution = clamp(Number(resolutionKm), 2, 5);
     const latStep = clippedResolution / 111;
-    const midLat = (bounds.minLat + bounds.maxLat) / 2;
+    const midLat = (bounded.minLat + bounded.maxLat) / 2;
     const lngStep = clippedResolution / (111 * Math.cos((midLat * Math.PI) / 180));
 
-    const rows = Math.max(1, Math.ceil((bounds.maxLat - bounds.minLat) / latStep));
-    const cols = Math.max(1, Math.ceil((bounds.maxLng - bounds.minLng) / lngStep));
+    const rows = Math.max(1, Math.ceil((bounded.maxLat - bounded.minLat) / latStep));
+    const cols = Math.max(1, Math.ceil((bounded.maxLng - bounded.minLng) / lngStep));
     const expectedCells = rows * cols;
     const stride = Math.max(1, Math.ceil(Math.sqrt(expectedCells / Math.max(1, maxCells))));
 
     const cells = [];
     for (let r = 0; r < rows; r += stride) {
       for (let c = 0; c < cols; c += stride) {
-        const lat = bounds.minLat + (r + 0.5) * latStep;
-        const lng = bounds.minLng + (c + 0.5) * lngStep;
-        if (lat >= bounds.maxLat || lng >= bounds.maxLng) {
+        const lat = bounded.minLat + (r + 0.5) * latStep;
+        const lng = bounded.minLng + (c + 0.5) * lngStep;
+        if (lat >= bounded.maxLat || lng >= bounded.maxLng) {
+          continue;
+        }
+        if (!isOperationalCoordinate(lat, lng, bounded)) {
           continue;
         }
 
@@ -513,7 +629,7 @@ export class PipelineService {
         const payamIndex = Math.floor((c / cols) * 14) + 1;
 
         cells.push({
-          id: `${countryCode}-${r}-${c}`,
+          id: `${safeCountryCode}-${r}-${c}`,
           row: r,
           col: c,
           centroid: {
@@ -530,9 +646,9 @@ export class PipelineService {
 
     const state = await this.store.transact((draft) => {
       draft.masterGrid = {
-        countryCode,
+        countryCode: safeCountryCode,
         resolutionKm: clippedResolution,
-        bounds,
+        bounds: bounded,
         rows,
         cols,
         stride,
@@ -551,8 +667,13 @@ export class PipelineService {
     if (state.dataSources.status !== "registered") {
       await this.registerDataSources();
     }
-    if (!state.masterGrid) {
-      await this.createMasterGrid();
+    if (!this.isMasterGridHealthy(state.masterGrid)) {
+      await this.createMasterGrid({
+        countryCode: this.config.defaultCountryCode,
+        resolutionKm: this.config.defaultGridResolutionKm,
+        maxCells: 800,
+        bounds: DEFAULT_OPERATIONAL_BOUNDS
+      });
     }
   }
 
@@ -613,7 +734,8 @@ export class PipelineService {
       };
 
       const missingSignals = [];
-      const missingProbability = clamp(0.03 + (hints.source === "simulated" ? 0.03 : 0.015), 0, 0.08);
+      const fallbackSource = String(hints.source || "");
+      const missingProbability = clamp(0.03 + (fallbackSource.startsWith("simulated") ? 0.03 : 0.015), 0, 0.08);
       const completedFeatureSet = { ...featureSet };
 
       for (const key of FEATURE_KEYS) {
@@ -864,7 +986,7 @@ export class PipelineService {
     });
   }
 
-  async runMovementForecast({ date = toDateString(), horizons = [7, 14], particleCount = 320 } = {}) {
+  async runMovementForecast({ date = toDateString(), horizons = [7, 14], particleCount = 920 } = {}) {
     const dateToken = toDateString(date);
 
     let state = await this.store.read();
@@ -880,23 +1002,110 @@ export class PipelineService {
     const { byId, neighborsOf } = this.buildCellLookups(grid);
 
     const gamByCell = new Map(run.gam.cells.map((cell) => [cell.cellId, cell]));
+    const featureByCell = new Map(run.featureVectors.map((item) => [item.cellId, item]));
 
-    const costSurface = run.gam.cells.map((cell) => {
-      const feature = run.featureVectors.find((item) => item.cellId === cell.cellId);
+    let costSurface = run.gam.cells.map((cell) => {
+      const feature = featureByCell.get(cell.cellId);
       const flood = feature?.floodingWaterlogging ?? 0.5;
       const slope = feature?.terrainSlope ?? 0.5;
       const waterDistance = feature?.distanceToReliableWater ?? 0.5;
+      const surfaceWater = feature?.surfaceWaterPresence ?? 0.5;
       const conflict = feature?.conflictAvoidancePrior ?? 0.5;
-      const cost = clamp(1 - cell.score + flood * 0.5 + slope * 0.35 + waterDistance * 0.3 + conflict * 0.45, 0.05, 2);
+      const forage = feature?.forageAvailability ?? 0.5;
+      const habitatScore = clamp(
+        (1 - flood) * 0.34 +
+        (1 - slope) * 0.28 +
+        (1 - waterDistance) * 0.2 +
+        forage * 0.12 +
+        cell.score * 0.06,
+        0,
+        1
+      );
+      const severePenalty = flood >= 0.78 || slope >= 0.84;
+      const waterStressDeadZone = waterDistance >= 0.93 && forage <= 0.34;
+      const openWaterLikelihood = clamp(
+        surfaceWater * 0.58 +
+        flood * 0.26 +
+        (1 - waterDistance) * 0.12 +
+        (1 - forage) * 0.04 -
+        slope * 0.08,
+        0,
+        1
+      );
+      const openWaterBody = openWaterLikelihood >= 0.86 && slope <= 0.34;
+      const compoundTerrainFlood = flood >= 0.68 && slope >= 0.72;
+      const lowHabitatWithPenalties = habitatScore <= 0.2 && (flood >= 0.62 || slope >= 0.74 || waterDistance >= 0.88);
+      const veryLowModelSupport = cell.score <= 0.12 && habitatScore <= 0.24;
+      const isUninhabitable =
+        severePenalty ||
+        waterStressDeadZone ||
+        openWaterBody ||
+        compoundTerrainFlood ||
+        lowHabitatWithPenalties ||
+        veryLowModelSupport;
+
+      const baseCost = 1 - cell.score + flood * 0.5 + slope * 0.35 + waterDistance * 0.3 + conflict * 0.45;
+      const cost = isUninhabitable
+        ? clamp(2.45 + flood * 0.7 + slope * 0.45 + waterDistance * 0.3, 2.4, 4.2)
+        : clamp(baseCost, 0.05, 2.3);
 
       return {
         cellId: cell.cellId,
         cost: Number(cost.toFixed(4)),
+        blocked: isUninhabitable,
+        habitatScore: Number(habitatScore.toFixed(3)),
         penalties: {
           flooding: Number(flood.toFixed(3)),
           steepSlope: Number(slope.toFixed(3)),
           distanceFromWater: Number(waterDistance.toFixed(3)),
+          openWater: Number(openWaterLikelihood.toFixed(3)),
           conflict: Number(conflict.toFixed(3))
+        }
+      };
+    });
+
+    const preliminaryCostByCell = new Map(costSurface.map((item) => [item.cellId, item]));
+    costSurface = costSurface.map((item) => {
+      const cell = byId.get(item.cellId);
+      const neighbors = cell ? neighborsOf(cell) : [];
+      if (!neighbors.length) return item;
+
+      const neighborCosts = neighbors
+        .map((neighbor) => preliminaryCostByCell.get(neighbor.id))
+        .filter(Boolean);
+      if (!neighborCosts.length) return item;
+
+      const neighborhoodOpenWater = clamp(
+        mean(neighborCosts.map((neighbor) => Number(neighbor?.penalties?.openWater ?? 0.5))),
+        0,
+        1
+      );
+      const drySupportCount = neighborCosts.filter((neighbor) =>
+        !neighbor.blocked &&
+        Number(neighbor?.penalties?.openWater ?? 0) < 0.62 &&
+        Number(neighbor?.habitatScore ?? 0) >= 0.34
+      ).length;
+      const drySupportRatio = drySupportCount / Math.max(1, neighborCosts.length);
+      const openWaterScore = Number(item?.penalties?.openWater ?? 0);
+
+      const isolatedOpenWaterCluster =
+        openWaterScore >= 0.8 ||
+        (openWaterScore >= 0.7 && drySupportRatio <= 0.2) ||
+        (openWaterScore >= 0.62 && neighborhoodOpenWater >= 0.75 && drySupportRatio <= 0.32) ||
+        (openWaterScore >= 0.58 && neighborhoodOpenWater >= 0.8 && drySupportRatio <= 0.28) ||
+        (neighborhoodOpenWater >= 0.84 && drySupportRatio <= 0.42);
+      const blocked = Boolean(item.blocked || isolatedOpenWaterCluster);
+      const adjustedCost = blocked
+        ? clamp(Math.max(Number(item.cost || 0), 2.95 + openWaterScore * 1.05), 2.8, 4.45)
+        : Number(item.cost || 0);
+
+      return {
+        ...item,
+        blocked,
+        cost: Number(adjustedCost.toFixed(4)),
+        penalties: {
+          ...item.penalties,
+          neighborhoodOpenWater: Number(neighborhoodOpenWater.toFixed(3))
         }
       };
     });
@@ -904,17 +1113,60 @@ export class PipelineService {
     const costByCell = new Map(costSurface.map((item) => [item.cellId, item]));
 
     const groundSignals = await this.buildGroundSignalLayer({ date: dateToken });
+    const groundByCell = new Map(groundSignals.map((item) => [item.cellId, item]));
     const signalAnchors = groundSignals
       .sort((a, b) => b.trustWeightedScore - a.trustWeightedScore)
       .map((item) => item.cellId)
-      .filter((id) => byId.has(id));
+      .filter((id) => byId.has(id) && !costByCell.get(id)?.blocked);
 
     const gamAnchors = [...run.gam.cells]
       .sort((a, b) => b.score - a.score)
-      .slice(0, 24)
+      .filter((item) => !costByCell.get(item.cellId)?.blocked)
+      .slice(0, 32)
       .map((item) => item.cellId);
 
-    const startAnchors = Array.from(new Set([...signalAnchors, ...gamAnchors])).slice(0, 28);
+    let startAnchors = Array.from(new Set([...signalAnchors, ...gamAnchors])).slice(0, 42);
+    if (!startAnchors.length) {
+      startAnchors = [...run.gam.cells]
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 24)
+        .map((item) => item.cellId);
+    }
+
+    const sortedRuns = [...state.dailyRuns].sort((a, b) => a.date.localeCompare(b.date));
+    const runIndex = sortedRuns.findIndex((item) => item.date === dateToken);
+    const previousRun = runIndex > 0 ? sortedRuns[runIndex - 1] : null;
+    const previousHeatByCell = new Map(
+      (previousRun?.movement?.simulations?.[7]?.probabilityHeatmap || []).map((item) => [item.cellId, Number(item.probability || 0)])
+    );
+    const recentValidations = sortedRuns
+      .filter((item) => item.date < dateToken && item.validation && Number(item.validation.sampleSize || 0) >= 4)
+      .slice(-21)
+      .map((item) => item.validation);
+    const avgValidationOverlap = recentValidations.length
+      ? mean(recentValidations.map((item) => Number(item.spatialOverlap || 0)))
+      : 0.56;
+    const avgValidationBrier = recentValidations.length
+      ? mean(recentValidations.map((item) => Number(item.probabilityCalibrationBrier || 0)))
+      : 0.29;
+    const avgValidationDistance = recentValidations.length
+      ? mean(recentValidations.map((item) => Number(item.meanDistanceToPredictedKm || 0)))
+      : 58;
+    const validationReliability = clamp(
+      avgValidationOverlap * 0.58 + (1 - avgValidationBrier) * 0.3 + (1 - clamp(avgValidationDistance / 220, 0, 1)) * 0.12,
+      0.35,
+      0.98
+    );
+    const calibrationFactor = clamp(
+      0.76 + avgValidationOverlap * 0.34 + (1 - avgValidationBrier) * 0.24 - clamp(avgValidationDistance / 260, 0, 1) * 0.16,
+      0.68,
+      1.12
+    );
+    const missingSignalRate = clamp(Number(run.ingestion?.missingSignalRate || 0), 0, 1);
+    const nearRealTimeLatency = Number(run.ingestion?.sourceLatencyHours?.nearRealTime || 24);
+    const freshnessFactor = clamp(1 - missingSignalRate * 0.45 - Math.max(0, nearRealTimeLatency - 24) / 240, 0.62, 1.04);
+
+    const herdSizePerParticle = 18;
 
     const horizonOutputs = {};
     for (const horizonDays of horizons) {
@@ -933,15 +1185,48 @@ export class PipelineService {
 
           visits.set(currentId, (visits.get(currentId) || 0) + 1);
 
-          const candidates = [currentCell, ...neighborsOf(currentCell)];
+          const candidates = [currentCell, ...neighborsOf(currentCell)].filter((candidate) => !costByCell.get(candidate.id)?.blocked);
+          if (!candidates.length) {
+            continue;
+          }
+
           const weightedCandidates = candidates.map((candidate) => {
             const gamCell = gamByCell.get(candidate.id);
             const costCell = costByCell.get(candidate.id);
+            const ground = groundByCell.get(candidate.id);
             const score = gamCell?.score ?? 0.4;
             const uncertaintyPenalty = gamCell?.uncertainty ?? 0.4;
             const cost = costCell?.cost ?? 1;
+            const habitatScore = Number(costCell?.habitatScore ?? 0.45);
+            const momentum = clamp(previousHeatByCell.get(candidate.id) || 0, 0, 0.08);
+            const communitySignal = clamp(
+              (Number(ground?.trustWeightedScore || 0) * 0.78) +
+              (Math.min(4, Number(ground?.verifiedCount || 0)) * 0.055),
+              0,
+              1
+            );
+            const trackerAgreement = clamp(
+              score * 0.4 +
+              habitatScore * 0.24 +
+              (1 - uncertaintyPenalty) * 0.15 +
+              communitySignal * 0.13 +
+              clamp(momentum * 12, 0, 1) * 0.08,
+              0,
+              1
+            );
+            const disagreementPenalty = clamp(1 - trackerAgreement, 0, 1);
 
-            const weight = clamp((1.4 - cost) + score * 0.8 - uncertaintyPenalty * 0.25, 0.02, 2.5);
+            const weight = clamp(
+              (1.4 - cost) +
+              score * 0.82 +
+              habitatScore * 0.24 +
+              momentum * 5.1 +
+              communitySignal * 0.28 -
+              uncertaintyPenalty * 0.22 -
+              disagreementPenalty * 0.34,
+              0.02,
+              2.8
+            );
             return {
               value: candidate.id,
               weight
@@ -958,43 +1243,300 @@ export class PipelineService {
       }
 
       const normalizer = particleCount * horizonDays;
-      const heatmap = Array.from(visits.entries())
-        .map(([cellId, visitCount]) => {
+      const activeCellIds = run.gam.cells
+        .map((cell) => cell.cellId)
+        .filter((cellId) => !costByCell.get(cellId)?.blocked);
+
+      const particleProbabilityByCell = new Map(
+        activeCellIds.map((cellId) => [cellId, (visits.get(cellId) || 0) / Math.max(1, normalizer)])
+      );
+
+      const ecologicalRawByCell = new Map();
+      const communitySeedByCell = new Map();
+      activeCellIds.forEach((cellId) => {
+        const ground = groundByCell.get(cellId);
+        const seed = clamp(
+          (Number(ground?.trustWeightedScore || 0) * 0.78) +
+          (Math.min(5, Number(ground?.reportCount || 0)) * 0.05) +
+          (Math.min(4, Number(ground?.verifiedCount || 0)) * 0.06),
+          0,
+          1
+        );
+        communitySeedByCell.set(cellId, seed);
+      });
+
+      activeCellIds.forEach((cellId) => {
+        const cell = byId.get(cellId);
+        const gamCell = gamByCell.get(cellId);
+        const costCell = costByCell.get(cellId);
+        const neighbors = (cell ? neighborsOf(cell) : []).filter((n) => !costByCell.get(n.id)?.blocked);
+        const neighborGam = mean(neighbors.map((n) => Number(gamByCell.get(n.id)?.score || 0.4)));
+        const flood = Number(costCell?.penalties?.flooding || 0.5);
+        const slope = Number(costCell?.penalties?.steepSlope || 0.5);
+        const waterDistance = Number(costCell?.penalties?.distanceFromWater || 0.5);
+        const habitatScore = Number(costCell?.habitatScore || 0.45);
+        const communitySeed = Number(communitySeedByCell.get(cellId) || 0);
+
+        const ecologicalRaw = clamp(
+          Number(gamCell?.score || 0.45) * 0.41 +
+          habitatScore * 0.27 +
+          (1 - flood) * 0.11 +
+          (1 - slope) * 0.08 +
+          (1 - waterDistance) * 0.08 +
+          neighborGam * 0.03 +
+          communitySeed * 0.02,
+          0,
+          1
+        );
+        ecologicalRawByCell.set(cellId, ecologicalRaw);
+      });
+
+      const communityRawByCell = new Map();
+      const hasCommunityEvidence = groundSignals.length > 0;
+      activeCellIds.forEach((cellId) => {
+        const cell = byId.get(cellId);
+        const costCell = costByCell.get(cellId);
+        const neighbors = (cell ? neighborsOf(cell) : []).filter((n) => !costByCell.get(n.id)?.blocked);
+        const seed = Number(communitySeedByCell.get(cellId) || 0);
+        const neighborSeed = mean(neighbors.map((n) => Number(communitySeedByCell.get(n.id) || 0)));
+        const temporal = clamp((previousHeatByCell.get(cellId) || 0) / 0.045, 0, 1);
+        const habitatGate = 0.55 + Number(costCell?.habitatScore || 0.45) * 0.45;
+        const raw = hasCommunityEvidence
+          ? clamp(seed * 0.56 + neighborSeed * 0.22 + temporal * 0.22, 0, 1) * habitatGate
+          : clamp(temporal * 0.7 + Number(particleProbabilityByCell.get(cellId) || 0) * 8, 0, 1) * habitatGate;
+        communityRawByCell.set(cellId, clamp(raw, 0, 1));
+      });
+
+      const normalizeDistribution = (rawByCell, fallbackByCell = null) => {
+        const total = Array.from(rawByCell.values()).reduce((sum, value) => sum + Number(value || 0), 0);
+        if (total > 0) {
+          return new Map(
+            Array.from(rawByCell.entries()).map(([cellId, value]) => [cellId, Number(value || 0) / total])
+          );
+        }
+        if (fallbackByCell) return new Map(fallbackByCell);
+        return new Map(activeCellIds.map((cellId) => [cellId, 0]));
+      };
+
+      const ecologicalProbabilityByCell = normalizeDistribution(ecologicalRawByCell, particleProbabilityByCell);
+      const communityProbabilityByCell = normalizeDistribution(communityRawByCell, particleProbabilityByCell);
+
+      let fusionWeights = hasCommunityEvidence
+        ? { particle: 0.5, ecological: 0.3, community: 0.2 }
+        : { particle: 0.58, ecological: 0.42, community: 0 };
+      if (missingSignalRate > 0.14) {
+        fusionWeights = {
+          particle: fusionWeights.particle + 0.05,
+          ecological: Math.max(0.08, fusionWeights.ecological - 0.05),
+          community: fusionWeights.community
+        };
+      }
+      if (validationReliability < 0.55) {
+        fusionWeights = {
+          particle: Math.max(0.3, fusionWeights.particle - 0.02),
+          ecological: fusionWeights.ecological + 0.03,
+          community: Math.max(0, fusionWeights.community - 0.01)
+        };
+      }
+      const weightTotal = Math.max(0.0001, fusionWeights.particle + fusionWeights.ecological + fusionWeights.community);
+      fusionWeights = {
+        particle: fusionWeights.particle / weightTotal,
+        ecological: fusionWeights.ecological / weightTotal,
+        community: fusionWeights.community / weightTotal
+      };
+
+      const fusedProbabilityByCell = new Map(
+        activeCellIds.map((cellId) => {
+          const particleP = Number(particleProbabilityByCell.get(cellId) || 0);
+          const ecologicalP = Number(ecologicalProbabilityByCell.get(cellId) || 0);
+          const communityP = Number(communityProbabilityByCell.get(cellId) || 0);
+          return [
+            cellId,
+            (particleP * fusionWeights.particle) +
+              (ecologicalP * fusionWeights.ecological) +
+              (communityP * fusionWeights.community)
+          ];
+        })
+      );
+
+      const heatmap = activeCellIds
+        .map((cellId) => {
           const cell = byId.get(cellId);
+          const costCell = costByCell.get(cellId);
+          const gamCell = gamByCell.get(cellId);
+          const particleP = Number(particleProbabilityByCell.get(cellId) || 0);
+          const ecologicalP = Number(ecologicalProbabilityByCell.get(cellId) || 0);
+          const communityP = Number(communityProbabilityByCell.get(cellId) || 0);
+          const rawProbability = Number(fusedProbabilityByCell.get(cellId) || 0);
+          const calibratedProbability = clamp(rawProbability * calibrationFactor * freshnessFactor, 0, 1);
+          const visitCount = Number(visits.get(cellId) || 0);
+          const estimatedCattle = Math.max(0, Math.round((visitCount / Math.max(1, horizonDays)) * herdSizePerParticle));
+          const habitatScore = clamp(Number(costCell?.habitatScore ?? 0), 0, 1);
+          const activeTrackerValues = [particleP, ecologicalP, communityP].filter((value, idx) => idx < 2 || fusionWeights.community > 0);
+          const trackerDisagreement = clamp(stddev(activeTrackerValues) / 0.12, 0, 1);
+          const trackerAgreement = clamp(1 - trackerDisagreement, 0, 1);
+          const projectionUncertainty = clamp(
+            (1 - trackerAgreement) * 0.55 +
+            Number(gamCell?.uncertainty || 0.5) * 0.27 +
+            (1 - validationReliability) * 0.18,
+            0.04,
+            0.96
+          );
+          const falseProjectionRisk = clamp(
+            (1 - trackerAgreement) * 0.52 +
+            projectionUncertainty * 0.34 +
+            (1 - habitatScore) * 0.14,
+            0,
+            1
+          );
           return {
             cellId,
-            probability: Number((visitCount / Math.max(1, normalizer)).toFixed(5)),
+            probability: Number(calibratedProbability.toFixed(5)),
             centroid: cell.centroid,
-            admin: cell.admin
+            admin: cell.admin,
+            blocked: false,
+            habitatScore: Number(habitatScore.toFixed(3)),
+            particleTrackerProbability: Number(particleP.toFixed(5)),
+            ecologicalTrackerProbability: Number(ecologicalP.toFixed(5)),
+            communityTrackerProbability: Number(communityP.toFixed(5)),
+            trackerAgreement: Number(trackerAgreement.toFixed(3)),
+            projectionUncertainty: Number(projectionUncertainty.toFixed(3)),
+            falseProjectionRisk: Number(falseProjectionRisk.toFixed(3)),
+            estimatedCattle,
+            estimatedHerds: Math.max(0, Math.round(estimatedCattle / 34))
           };
         })
         .sort((a, b) => b.probability - a.probability);
+      const heatByCell = new Map(heatmap.map((item) => [item.cellId, item]));
 
       const transitionTotal = Array.from(transitions.values()).reduce((sum, value) => sum + value, 0);
       const topCorridors = Array.from(transitions.entries())
         .map(([edgeKey, count]) => {
           const [fromCellId, toCellId] = edgeKey.split("|");
-          const probability = count / Math.max(1, transitionTotal);
+          const fromRisk = costByCell.get(fromCellId);
+          const toRisk = costByCell.get(toCellId);
+          if (fromRisk?.blocked || toRisk?.blocked) return null;
+
+          const baseProbability = count / Math.max(1, transitionTotal);
+          const penalty = clamp(
+            ((toRisk?.penalties?.flooding ?? 0.4) * 0.38) +
+            ((toRisk?.penalties?.steepSlope ?? 0.4) * 0.28) +
+            ((toRisk?.penalties?.distanceFromWater ?? 0.4) * 0.2) +
+            ((toRisk?.penalties?.conflict ?? 0.35) * 0.14),
+            0,
+            0.92
+          );
+          const fromMeta = heatByCell.get(fromCellId);
+          const toMeta = heatByCell.get(toCellId);
+          const particleCorridorProbability = baseProbability;
+          const ecologicalCorridorProbability = clamp(
+            (
+              Number(fromMeta?.ecologicalTrackerProbability || 0) * 0.36 +
+              Number(toMeta?.ecologicalTrackerProbability || 0) * 0.64
+            ) * (1 - penalty * 0.36),
+            0,
+            1
+          );
+          const communityCorridorProbability = clamp(
+            (
+              Number(fromMeta?.communityTrackerProbability || 0) * 0.32 +
+              Number(toMeta?.communityTrackerProbability || 0) * 0.68
+            ) * (1 - penalty * 0.22),
+            0,
+            1
+          );
+          const trackerAgreement = clamp(
+            (Number(fromMeta?.trackerAgreement || 0.45) * 0.42) +
+            (Number(toMeta?.trackerAgreement || 0.45) * 0.34) +
+            (1 - clamp(stddev([particleCorridorProbability, ecologicalCorridorProbability, communityCorridorProbability]) / 0.14, 0, 1)) * 0.08 +
+            ((1 - penalty) * 0.16),
+            0,
+            1
+          );
+          const projectionUncertainty = clamp(
+            (Number(fromMeta?.projectionUncertainty || 0.5) * 0.42) +
+            (Number(toMeta?.projectionUncertainty || 0.5) * 0.42) +
+            (penalty * 0.16),
+            0.04,
+            0.96
+          );
+          const falseProjectionRisk = clamp(
+            (1 - trackerAgreement) * 0.52 +
+            projectionUncertainty * 0.34 +
+            penalty * 0.14,
+            0,
+            1
+          );
+          const endpointReliability = clamp(
+            (Number(fromMeta?.habitatScore || 0.2) * 0.2) +
+            (Number(toMeta?.habitatScore || 0.2) * 0.25) +
+            trackerAgreement * 0.35 +
+            (1 - falseProjectionRisk) * 0.2,
+            0,
+            1
+          );
+          if (endpointReliability < 0.24 || falseProjectionRisk >= 0.9) {
+            return null;
+          }
+          const fusedBaseProbability = clamp(
+            particleCorridorProbability * fusionWeights.particle +
+              ecologicalCorridorProbability * fusionWeights.ecological +
+              communityCorridorProbability * fusionWeights.community,
+            0,
+            1
+          );
+          const probability = clamp(
+            fusedBaseProbability * (1 - penalty * 0.6) * (0.91 + trackerAgreement * 0.19) * (1 - falseProjectionRisk * 0.32) * calibrationFactor,
+            0,
+            1
+          );
           const destination = gamByCell.get(toCellId);
+          const estimatedCattleFlow = Math.max(
+            0,
+            Math.round((probability * normalizer / Math.max(1, horizonDays)) * herdSizePerParticle * (0.72 + trackerAgreement * 0.42) * (1 - falseProjectionRisk * 0.38))
+          );
 
           let classification = "Low";
-          if (probability >= 0.02) classification = "High";
-          else if (probability >= 0.008) classification = "Moderate";
+          if (probability >= 0.022 && trackerAgreement >= 0.56 && falseProjectionRisk < 0.52) classification = "High";
+          else if (probability >= 0.009 && trackerAgreement >= 0.4 && falseProjectionRisk < 0.7) classification = "Moderate";
 
           return {
             fromCellId,
             toCellId,
             probability: Number(probability.toFixed(5)),
             classification,
-            confidence: uncertaintyBand(destination?.uncertainty ?? 0.6),
+            confidence: uncertaintyBand(projectionUncertainty),
+            estimatedCattleFlow,
+            estimatedHerds: Math.max(0, Math.round(estimatedCattleFlow / 34)),
+            destinationRiskPenalty: Number(penalty.toFixed(3)),
+            particleTrackerProbability: Number(particleCorridorProbability.toFixed(5)),
+            ecologicalTrackerProbability: Number(ecologicalCorridorProbability.toFixed(5)),
+            communityTrackerProbability: Number(communityCorridorProbability.toFixed(5)),
+            trackerAgreement: Number(trackerAgreement.toFixed(3)),
+            projectionUncertainty: Number(projectionUncertainty.toFixed(3)),
+            falseProjectionRisk: Number(falseProjectionRisk.toFixed(3)),
+            projectionStatus:
+              falseProjectionRisk <= 0.38 ? "Reliable" : falseProjectionRisk <= 0.62 ? "Watch" : "Uncertain",
             driverSummary: destination?.explanation || "mixed drivers"
           };
         })
+        .filter(Boolean)
         .sort((a, b) => b.probability - a.probability)
-        .slice(0, 24);
+        .slice(0, 36);
 
       const topShare = topCorridors.slice(0, 5).reduce((sum, corridor) => sum + corridor.probability, 0);
       const confidenceBand = topShare > 0.28 ? "High" : topShare > 0.18 ? "Medium" : "Low";
+      const estimatedCattleTotal = heatmap.reduce((sum, cell) => sum + (cell.estimatedCattle || 0), 0);
+      const averageTrackerAgreement = mean(heatmap.map((cell) => Number(cell.trackerAgreement || 0)));
+      const averageProjectionUncertainty = mean(heatmap.map((cell) => Number(cell.projectionUncertainty || 0)));
+      const falseProjectionHotspots = heatmap.filter((cell) => Number(cell.falseProjectionRisk || 0) >= 0.68).length;
+      const expectedAccuracy = clamp(
+        validationReliability * 0.48 +
+        averageTrackerAgreement * 0.34 +
+        (1 - averageProjectionUncertainty) * 0.18,
+        0.5,
+        0.93
+      );
 
       horizonOutputs[horizonDays] = {
         horizonDays,
@@ -1002,7 +1544,26 @@ export class PipelineService {
         particleCount,
         probabilityHeatmap: heatmap,
         dominantCorridors: topCorridors,
-        confidenceBand
+        confidenceBand,
+        blockedCellCount: costSurface.filter((cell) => cell.blocked).length,
+        estimatedCattleTotal,
+        averageTrackerAgreement: Number(averageTrackerAgreement.toFixed(3)),
+        averageProjectionUncertainty: Number(averageProjectionUncertainty.toFixed(3)),
+        falseProjectionHotspots,
+        validationReliability: Number(validationReliability.toFixed(3)),
+        calibrationFactor: Number(calibrationFactor.toFixed(3)),
+        expectedAccuracy: Number(expectedAccuracy.toFixed(3)),
+        fusionWeights: {
+          particle: Number(fusionWeights.particle.toFixed(3)),
+          ecological: Number(fusionWeights.ecological.toFixed(3)),
+          community: Number(fusionWeights.community.toFixed(3))
+        },
+        trackerModels: [
+          "particle_flow_tracker",
+          "ecological_suitability_tracker",
+          "community_momentum_tracker",
+          "ensemble_fusion"
+        ]
       };
     }
 
@@ -1751,22 +2312,45 @@ export class PipelineService {
   }
 
   async getMapLayers({ date = toDateString(), horizonDays = 7 } = {}) {
+    await this.ensureBootstrapped();
     const dateToken = toDateString(date);
-    const outputs = await this.buildDecisionSupportOutputs({ date: dateToken });
-    const state = await this.store.read();
-    const run = state.dailyRuns.find((item) => item.date === dateToken);
+    let state = await this.store.read();
+    let run = state.dailyRuns.find((item) => item.date === dateToken);
+    const gridCellIds = new Set((state.masterGrid?.cells || []).map((cell) => cell.id));
+    let alignmentRatio = this.runGridAlignmentRatio(run, gridCellIds, horizonDays);
+    const needsRefresh =
+      !run?.movement?.simulations?.[horizonDays] ||
+      alignmentRatio < 0.7;
+
+    if (needsRefresh) {
+      await this.runDailyPipeline({ date: dateToken });
+      state = await this.store.read();
+      run = state.dailyRuns.find((item) => item.date === dateToken);
+      const refreshedGridCellIds = new Set((state.masterGrid?.cells || []).map((cell) => cell.id));
+      alignmentRatio = this.runGridAlignmentRatio(run, refreshedGridCellIds, horizonDays);
+    }
     if (!run) throw new Error(`No run found for ${dateToken}`);
 
+    const outputs = await this.buildDecisionSupportOutputs({ date: dateToken });
+
     const probabilityMap = run.movement?.simulations?.[horizonDays]?.probabilityHeatmap || [];
-    const probabilityByCell = new Map(probabilityMap.map((item) => [item.cellId, item.probability]));
+    const probabilityByCell = new Map(probabilityMap.map((item) => [item.cellId, item]));
     const groundLayer = await this.buildGroundSignalLayer({ date: dateToken });
     const groundByCell = new Map(groundLayer.map((item) => [item.cellId, item]));
     const costByCell = new Map((outputs.floodAndAccessConstraints || []).map((item) => [item.cellId, item]));
+    const operationalBounds = this.activeOperationalBounds(state.masterGrid);
+    const gridCells = (state.masterGrid?.cells || []).filter((cell) => {
+      const lat = Number(cell?.centroid?.lat);
+      const lng = Number(cell?.centroid?.lng);
+      return isOperationalCoordinate(lat, lng, operationalBounds);
+    });
+    const validCellIds = new Set(gridCells.map((cell) => cell.id));
 
-    const cells = (state.masterGrid?.cells || []).map((cell) => {
+    const cells = gridCells.map((cell) => {
       const attractiveness = outputs.grazingAttractivenessMap.find((item) => item.cellId === cell.id);
       const community = groundByCell.get(cell.id);
       const cost = costByCell.get(cell.id);
+      const probabilityMeta = probabilityByCell.get(cell.id);
       return {
         cellId: cell.id,
         row: cell.row,
@@ -1775,22 +2359,63 @@ export class PipelineService {
         admin: cell.admin,
         attractivenessScore: attractiveness?.score ?? null,
         uncertainty: attractiveness?.uncertainty ?? null,
-        probability7d: probabilityByCell.get(cell.id) ?? 0,
+        probability7d: probabilityMeta?.probability ?? 0,
         movementCost: cost?.cost ?? null,
+        habitatScore: cost?.habitatScore ?? null,
+        uninhabitable: Boolean(cost?.blocked),
         floodPenalty: cost?.penalties?.flooding ?? null,
         conflictPenalty: cost?.penalties?.conflict ?? null,
+        terrainPenalty: cost?.penalties?.steepSlope ?? null,
+        waterDistancePenalty: cost?.penalties?.distanceFromWater ?? null,
+        openWaterPenalty: cost?.penalties?.openWater ?? null,
+        openWaterNeighborhoodPenalty: cost?.penalties?.neighborhoodOpenWater ?? null,
         communityTrust: community?.trustWeightedScore ?? 0,
-        communityReports: community?.reportCount ?? 0
+        communityReports: community?.reportCount ?? 0,
+        estimatedCattle: probabilityMeta?.estimatedCattle ?? 0,
+        estimatedHerds: probabilityMeta?.estimatedHerds ?? 0,
+        particleTrackerProbability: probabilityMeta?.particleTrackerProbability ?? null,
+        ecologicalTrackerProbability: probabilityMeta?.ecologicalTrackerProbability ?? null,
+        communityTrackerProbability: probabilityMeta?.communityTrackerProbability ?? null,
+        trackerAgreement: probabilityMeta?.trackerAgreement ?? null,
+        projectionUncertainty: probabilityMeta?.projectionUncertainty ?? null,
+        falseProjectionRisk: probabilityMeta?.falseProjectionRisk ?? null
       };
     });
+    const corridors = (outputs.probabilisticMovementCorridors || []).filter((corridor) =>
+      validCellIds.has(corridor?.fromCellId) &&
+      validCellIds.has(corridor?.toCellId)
+    );
+
+    const providerRuntime = await this.googleEarthService.resolveRuntimeMode();
+    const externalSources = this.googleEarthService.getMapSourceCatalog();
 
     return {
       date: dateToken,
       generatedAt: new Date().toISOString(),
+      sources: {
+        activeProvider: providerRuntime.activeProvider,
+        useFallback: providerRuntime.useFallback,
+        providers: providerRuntime.providers,
+        externalSources
+      },
       layers: {
         cells,
-        corridors: outputs.probabilisticMovementCorridors,
+        corridors,
         adminSummaries: outputs.adminSummaries
+      },
+      metrics: {
+        estimatedCattleTotal: Number(run.movement?.simulations?.[horizonDays]?.estimatedCattleTotal || 0),
+        blockedCellCount: Number(run.movement?.simulations?.[horizonDays]?.blockedCellCount || 0),
+        averageTrackerAgreement: Number(run.movement?.simulations?.[horizonDays]?.averageTrackerAgreement || 0),
+        averageProjectionUncertainty: Number(run.movement?.simulations?.[horizonDays]?.averageProjectionUncertainty || 0),
+        falseProjectionHotspots: Number(run.movement?.simulations?.[horizonDays]?.falseProjectionHotspots || 0),
+        validationReliability: Number(run.movement?.simulations?.[horizonDays]?.validationReliability || 0),
+        calibrationFactor: Number(run.movement?.simulations?.[horizonDays]?.calibrationFactor || 0),
+        expectedAccuracy: Number(run.movement?.simulations?.[horizonDays]?.expectedAccuracy || 0),
+        fusionWeights: run.movement?.simulations?.[horizonDays]?.fusionWeights || null,
+        trackerModels: run.movement?.simulations?.[horizonDays]?.trackerModels || [],
+        filteredOutCellCount: Math.max(0, Number(state.masterGrid?.cells?.length || 0) - cells.length),
+        gridAlignmentRatio: Number(alignmentRatio.toFixed(4))
       }
     };
   }
