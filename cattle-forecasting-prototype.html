@@ -1523,8 +1523,8 @@ document.getElementById('init-time').textContent = new Date().toLocaleTimeString
 // ============================
 const apiParam = new URLSearchParams(window.location.search).get('api');
 const defaultApiBase = window.location.origin && window.location.origin !== 'null'
-  ? window.location.origin
-  : 'http://localhost:8080';
+  ? `${window.location.origin}/api`
+  : 'http://localhost:8080/api';
 const API_BASE = (apiParam ? apiParam.trim() : defaultApiBase).replace(/\/+$/, '');
 
 function apiUrl(path) {

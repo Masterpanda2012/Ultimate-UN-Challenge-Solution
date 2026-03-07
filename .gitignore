@@ -5,3 +5,7 @@ cattle-forecasting-prototype (1).html
 
 # OS noise
 .DS_Store
+
+# Local dependency/build state
+node_modules/
+.vercel/

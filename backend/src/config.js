@@ -6,6 +6,8 @@ dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const isVercelRuntime = Boolean(process.env.VERCEL);
+const defaultDataRoot = isVercelRuntime ? "/tmp/cattle-forecast" : path.resolve(__dirname, "../data");
 
 function toNumber(value, fallback) {
   const num = Number(value);
@@ -23,8 +25,8 @@ function toBool(value, fallback = false) {
 export const config = {
   port: toNumber(process.env.PORT, 8080),
   nodeEnv: process.env.NODE_ENV || "development",
-  dataFilePath: process.env.DATA_FILE_PATH || path.resolve(__dirname, "../data/state.json"),
-  dataExportsDir: process.env.DATA_EXPORTS_DIR || path.resolve(__dirname, "../data/exports"),
+  dataFilePath: process.env.DATA_FILE_PATH || path.resolve(defaultDataRoot, "state.json"),
+  dataExportsDir: process.env.DATA_EXPORTS_DIR || path.resolve(defaultDataRoot, "exports"),
   googleEarthApiKey: process.env.GOOGLE_EARTH_API_KEY || "",
   earthEngineProject: process.env.EARTH_ENGINE_PROJECT || "earthengine-public",
   enableLiveEarthCalls: toBool(process.env.ENABLE_LIVE_EARTH_CALLS, false),
@@ -33,7 +35,7 @@ export const config = {
   pipelineIntervalHours: toNumber(process.env.PIPELINE_INTERVAL_HOURS, 24),
   defaultGridResolutionKm: toNumber(process.env.DEFAULT_GRID_RESOLUTION_KM, 5),
   defaultCountryCode: process.env.DEFAULT_COUNTRY_CODE || "UN-DEMO",
-  autoBootstrapOnStart: toBool(process.env.AUTO_BOOTSTRAP_ON_START, true),
+  autoBootstrapOnStart: toBool(process.env.AUTO_BOOTSTRAP_ON_START, !isVercelRuntime),
   providerProbeTimeoutMs: toNumber(process.env.PROVIDER_PROBE_TIMEOUT_MS, 2800)
 };
 
