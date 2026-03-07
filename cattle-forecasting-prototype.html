@@ -1526,9 +1526,24 @@ const defaultApiBase = window.location.origin && window.location.origin !== 'nul
   ? `${window.location.origin}/api`
   : 'http://localhost:8080/api';
 const API_BASE = (apiParam ? apiParam.trim() : defaultApiBase).replace(/\/+$/, '');
+let sameOriginApiGateway = false;
+let normalizedApiBaseUrl = null;
+try {
+  normalizedApiBaseUrl = new URL(API_BASE, window.location.href);
+  sameOriginApiGateway = normalizedApiBaseUrl.origin === window.location.origin &&
+    /^\/api$/i.test(normalizedApiBaseUrl.pathname.replace(/\/+$/, '') || '/api');
+} catch {
+  sameOriginApiGateway = false;
+}
 
 function apiUrl(path) {
-  return `${API_BASE}${path}`;
+  const normalizedPath = String(path || '').startsWith('/') ? String(path) : `/${String(path || '')}`;
+  if (sameOriginApiGateway && normalizedApiBaseUrl) {
+    const url = new URL(normalizedApiBaseUrl.toString());
+    url.searchParams.set('path', normalizedPath);
+    return url.toString();
+  }
+  return `${API_BASE}${normalizedPath}`;
 }
 
 function escapeHtml(text) {
