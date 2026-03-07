@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/", "destination": "/cattle-forecasting-prototype.html" },
+    { "source": "/prototype", "destination": "/cattle-forecasting-prototype.html" }
+  ]
+}
